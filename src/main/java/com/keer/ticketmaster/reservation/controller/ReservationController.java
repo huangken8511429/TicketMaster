@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.async.DeferredResult;
 
 import java.util.Map;
 
@@ -25,11 +26,7 @@ public class ReservationController {
     }
 
     @GetMapping("/{reservationId}")
-    public ResponseEntity<ReservationResponse> getReservation(@PathVariable String reservationId) {
-        ReservationResponse response = reservationService.getReservation(reservationId);
-        if (response == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok(response);
+    public DeferredResult<ResponseEntity<ReservationResponse>> getReservation(@PathVariable String reservationId) {
+        return reservationService.getReservationAsync(reservationId);
     }
 }

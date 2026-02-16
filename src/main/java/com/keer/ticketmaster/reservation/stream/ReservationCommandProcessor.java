@@ -1,9 +1,9 @@
 package com.keer.ticketmaster.reservation.stream;
 
+import com.keer.ticketmaster.avro.ReservationCommand;
+import com.keer.ticketmaster.avro.ReservationRequestedEvent;
+import com.keer.ticketmaster.avro.ReservationState;
 import com.keer.ticketmaster.config.KafkaStreamsConfig;
-import com.keer.ticketmaster.reservation.event.ReservationCommand;
-import com.keer.ticketmaster.reservation.event.ReservationRequestedEvent;
-import com.keer.ticketmaster.reservation.model.ReservationState;
 import org.apache.kafka.streams.processor.api.Processor;
 import org.apache.kafka.streams.processor.api.ProcessorContext;
 import org.apache.kafka.streams.processor.api.Record;
@@ -29,29 +29,29 @@ public class ReservationCommandProcessor
         ReservationCommand command = record.value();
         String reservationId = command.getReservationId();
 
-        // Write PENDING state to reservation-store
-        ReservationState state = new ReservationState(
-                reservationId,
-                command.getEventId(),
-                command.getSection(),
-                command.getSeatCount(),
-                command.getUserId(),
-                "PENDING",
-                List.of(),
-                Instant.now(),
-                Instant.now()
-        );
+        ReservationState state = ReservationState.newBuilder()
+                .setReservationId(reservationId)
+                .setEventId(command.getEventId())
+                .setSection(command.getSection())
+                .setSeatCount(command.getSeatCount())
+                .setUserId(command.getUserId())
+                .setStatus("PENDING")
+                .setAllocatedSeats(List.of())
+                .setCreatedAt(Instant.now().toEpochMilli())
+                .setUpdatedAt(Instant.now().toEpochMilli())
+                .build();
         reservationStore.put(reservationId, state);
 
-        // Forward to reservation-requests
-        ReservationRequestedEvent event = new ReservationRequestedEvent(
-                reservationId,
-                command.getEventId(),
-                command.getSection(),
-                command.getSeatCount(),
-                command.getUserId(),
-                Instant.now()
-        );
-        context.forward(new Record<>(reservationId, event, record.timestamp()));
+        ReservationRequestedEvent event = ReservationRequestedEvent.newBuilder()
+                .setReservationId(reservationId)
+                .setEventId(command.getEventId())
+                .setSection(command.getSection())
+                .setSeatCount(command.getSeatCount())
+                .setUserId(command.getUserId())
+                .setTimestamp(Instant.now().toEpochMilli())
+                .build();
+
+        String eventKey = String.valueOf(command.getEventId());
+        context.forward(new Record<>(eventKey, event, record.timestamp()));
     }
 }

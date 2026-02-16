@@ -1,9 +1,10 @@
 package com.keer.ticketmaster.ticket.stream;
 
+import com.keer.ticketmaster.avro.ReservationRequestedEvent;
+import com.keer.ticketmaster.avro.ReservationResultEvent;
+import com.keer.ticketmaster.avro.SeatState;
+import com.keer.ticketmaster.avro.SeatStateStatus;
 import com.keer.ticketmaster.config.KafkaStreamsConfig;
-import com.keer.ticketmaster.reservation.event.ReservationRequestedEvent;
-import com.keer.ticketmaster.reservation.event.ReservationResultEvent;
-import com.keer.ticketmaster.ticket.model.SeatState;
 import org.apache.kafka.streams.processor.api.Processor;
 import org.apache.kafka.streams.processor.api.ProcessorContext;
 import org.apache.kafka.streams.processor.api.Record;
@@ -31,61 +32,61 @@ public class SeatAllocationProcessor
     public void process(Record<String, ReservationRequestedEvent> record) {
         ReservationRequestedEvent request = record.value();
         String reservationId = request.getReservationId();
-        Long eventId = request.getEventId();
+        long eventId = request.getEventId();
         String section = request.getSection();
         int seatCount = request.getSeatCount();
 
-        // Scan seat-inventory-store for seats matching eventId + section prefix
         String keyPrefix = eventId + "-" + section;
         List<SeatState> availableSeats = new ArrayList<>();
 
-        try (KeyValueIterator<String, SeatState> iterator = seatStore.prefixScan(keyPrefix, org.apache.kafka.common.serialization.Serdes.String().serializer())) {
+        try (KeyValueIterator<String, SeatState> iterator = seatStore.prefixScan(
+                keyPrefix, org.apache.kafka.common.serialization.Serdes.String().serializer())) {
             while (iterator.hasNext()) {
                 var entry = iterator.next();
                 SeatState seat = entry.value;
-                if ("AVAILABLE".equals(seat.getStatus())) {
+                if (SeatStateStatus.AVAILABLE == seat.getStatus()) {
                     availableSeats.add(seat);
                 }
             }
         }
 
-        // Sort by seat number for consecutive seat allocation
         availableSeats.sort(Comparator.comparing(SeatState::getSeatNumber));
 
-        // Find consecutive available seats
         List<String> allocatedSeats = findConsecutiveSeats(availableSeats, seatCount);
 
         ReservationResultEvent result;
         if (allocatedSeats != null && allocatedSeats.size() == seatCount) {
-            // Mark seats as RESERVED
             for (String seatNumber : allocatedSeats) {
                 String seatKey = eventId + "-" + seatNumber;
                 SeatState seat = seatStore.get(seatKey);
                 if (seat != null) {
-                    seat.setStatus("RESERVED");
-                    seat.setReservationId(reservationId);
-                    seatStore.put(seatKey, seat);
+                    SeatState updated = SeatState.newBuilder(seat)
+                            .setStatus(SeatStateStatus.RESERVED)
+                            .setReservationId(reservationId)
+                            .build();
+                    seatStore.put(seatKey, updated);
                 }
             }
 
-            result = new ReservationResultEvent(
-                    reservationId,
-                    true,
-                    allocatedSeats,
-                    null,
-                    Instant.now()
-            );
+            result = ReservationResultEvent.newBuilder()
+                    .setReservationId(reservationId)
+                    .setSuccess(true)
+                    .setAllocatedSeats(allocatedSeats)
+                    .setFailureReason(null)
+                    .setTimestamp(Instant.now().toEpochMilli())
+                    .build();
         } else {
-            result = new ReservationResultEvent(
-                    reservationId,
-                    false,
-                    List.of(),
-                    "Not enough consecutive available seats in section " + section,
-                    Instant.now()
-            );
+            result = ReservationResultEvent.newBuilder()
+                    .setReservationId(reservationId)
+                    .setSuccess(false)
+                    .setAllocatedSeats(List.of())
+                    .setFailureReason("Not enough consecutive available seats in section " + section)
+                    .setTimestamp(Instant.now().toEpochMilli())
+                    .build();
         }
 
-        context.forward(new Record<>(reservationId, result, record.timestamp()));
+        String eventKey = String.valueOf(eventId);
+        context.forward(new Record<>(eventKey, result, record.timestamp()));
     }
 
     private List<String> findConsecutiveSeats(List<SeatState> availableSeats, int seatCount) {
@@ -93,8 +94,6 @@ public class SeatAllocationProcessor
             return null;
         }
 
-        // Try to find a consecutive run of seatCount seats
-        // Seats are sorted by seatNumber (e.g., A-001, A-002, A-003)
         for (int i = 0; i <= availableSeats.size() - seatCount; i++) {
             boolean consecutive = true;
             List<String> candidate = new ArrayList<>();
@@ -119,15 +118,12 @@ public class SeatAllocationProcessor
     }
 
     private boolean areConsecutive(String seat1, String seat2) {
-        // Seat format: "A-001", "A-002" etc.
-        // Extract the numeric suffix and check if they differ by 1
         int num1 = extractSeatNumber(seat1);
         int num2 = extractSeatNumber(seat2);
         return num2 - num1 == 1;
     }
 
     private int extractSeatNumber(String seatNumber) {
-        // Extract numeric part after the last '-'
         int lastDash = seatNumber.lastIndexOf('-');
         if (lastDash >= 0 && lastDash < seatNumber.length() - 1) {
             return Integer.parseInt(seatNumber.substring(lastDash + 1));

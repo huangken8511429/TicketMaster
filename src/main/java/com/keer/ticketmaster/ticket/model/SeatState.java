@@ -12,6 +12,6 @@ public class SeatState {
     private String seatNumber;
     private Long eventId;
     private String section;
-    private String status; // AVAILABLE, RESERVED
+    private SeatStateStatus status;
     private String reservationId;
 }

@@ -13,6 +13,7 @@ import java.util.List;
 public class ReservationCompletedEvent {
 
     private String reservationId;
+    private Long eventId;
     private String userId;
     private String status;
     private List<String> allocatedSeats;

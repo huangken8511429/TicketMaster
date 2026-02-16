@@ -1,0 +1,13 @@
+{
+  "type": "record",
+  "name": "ReservationCommand",
+  "namespace": "com.keer.ticketmaster.avro",
+  "fields": [
+    {"name": "reservationId", "type": "string"},
+    {"name": "eventId", "type": "long"},
+    {"name": "section", "type": "string"},
+    {"name": "seatCount", "type": "int"},
+    {"name": "userId", "type": "string"},
+    {"name": "timestamp", "type": "long", "logicalType": "timestamp-millis"}
+  ]
+}

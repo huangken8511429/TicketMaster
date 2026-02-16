@@ -24,8 +24,8 @@ public class ReservationWhenSteps {
     @Autowired
     private ScenarioContext scenarioContext;
 
-    @當("^使用者「(.+)」預定活動的「(.+)」區 (\\d+) 個連續座位$")
-    public void 使用者預定連續座位(String userId, String section, int seatCount) throws Exception {
+    @當("^使用者「(.+)」預訂活動的「(.+)」區 (\\d+) 個連續座位$")
+    public void 使用者預訂連續座位(String userId, String section, int seatCount) throws Exception {
         Long eventId = (Long) scenarioContext.get("createdEventId");
 
         ReservationRequest request = new ReservationRequest(eventId, section, seatCount, userId);

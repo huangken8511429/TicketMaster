@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>TicketMaster Architecture</title>
+  <style>
+    body { background: #1a1a2e; color: #eee; font-family: system-ui, sans-serif; margin: 0; padding: 20px; }
+    h1 { text-align: center; color: #e94560; }
+    h2 { color: #0f3460; background: #e94560; display: inline-block; padding: 4px 12px; border-radius: 4px; }
+    .diagram { display: flex; justify-content: center; margin: 20px 0; }
+    .legend { max-width: 900px; margin: 20px auto; padding: 16px; background: #16213e; border-radius: 8px; font-size: 14px; line-height: 1.8; }
+    .legend code { background: #0f3460; padding: 2px 6px; border-radius: 3px; color: #e94560; }
+  </style>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      flowchart: { curve: 'basis', padding: 20 },
+      themeVariables: {
+        primaryColor: '#0f3460',
+        primaryTextColor: '#eee',
+        primaryBorderColor: '#e94560',
+        lineColor: '#e94560',
+        secondaryColor: '#16213e',
+        tertiaryColor: '#1a1a2e'
+      }
+    });
+  </script>
+</head>
+<body>
+
+<h1>TicketMaster System Architecture</h1>
+
+<!-- ==================== MAIN OVERVIEW ==================== -->
+<h2>1. System Overview</h2>
+<div class="diagram">
+  <pre class="mermaid">
+graph TB
+    subgraph Clients["Clients"]
+        Browser["Browser / k6"]
+    end
+
+    subgraph SpringBoot["Spring Boot Application (Monolith)"]
+        subgraph REST["REST API Layer"]
+            VC["VenueController<br/>/api/venues"]
+            EC["EventController<br/>/api/events"]
+            TC["TicketController<br/>/api/tickets"]
+            RC["ReservationController<br/>/api/reservations"]
+            SSE["SSE Endpoint<br/>/api/tickets/stream"]
+        end
+
+        subgraph Services["Service Layer"]
+            VS["VenueService"]
+            ES["EventService"]
+            TS["TicketService"]
+            RS["ReservationService"]
+            SSES["TicketSseService"]
+        end
+
+        subgraph KafkaStreams["Kafka Streams Topology"]
+            SMP["SeatEventMaterialize<br/>Processor"]
+            RCP["ReservationCommand<br/>Processor"]
+            SAP["SeatAllocation<br/>Processor"]
+            RRP["ReservationResult<br/>Processor"]
+        end
+
+        subgraph StateStores["State Stores (RocksDB)"]
+            SIS[("seat-inventory-store<br/>Key: eventId-seatNumber<br/>Val: SeatState")]
+            RES[("reservation-store<br/>Key: reservationId<br/>Val: ReservationState")]
+        end
+    end
+
+    subgraph Infra["Infrastructure"]
+        PG[("PostgreSQL<br/>venues, events, tickets")]
+        Redis[("Redis<br/>Cache")]
+        Kafka["Apache Kafka<br/>(KRaft, Single Broker)"]
+        OTEL["Grafana LGTM<br/>OpenTelemetry"]
+    end
+
+    Browser --> REST
+    VC --> VS
+    EC --> ES
+    TC --> TS
+    RC --> RS
+    SSE --> SSES
+
+    VS --> PG
+    ES --> PG
+    TS --> PG
+    TS --> Kafka
+
+    RS -->|"produce to<br/>reservation-commands"| Kafka
+    RS -->|"Interactive Query"| RES
+
+    Kafka --> KafkaStreams
+    SMP --> SIS
+    RCP --> RES
+    SAP --> SIS
+
+    SpringBoot -.-> OTEL
+  </pre>
+</div>
+
+<!-- ==================== KAFKA STREAMS DETAIL ==================== -->
+<h2>2. Kafka Streams Data Flow (Core Booking Pipeline)</h2>
+<div class="diagram">
+  <pre class="mermaid">
+flowchart LR
+    subgraph Produce["HTTP Layer"]
+        TS["TicketService<br/><i>POST /api/tickets</i>"]
+        RS["ReservationService<br/><i>POST /api/reservations</i>"]
+    end
+
+    subgraph Topics["Kafka Topics (20 partitions each)"]
+        T1(["seat-events<br/>key: eventId"])
+        T2(["reservation-commands<br/>key: eventId"])
+        T3(["reservation-requests<br/>key: eventId"])
+        T4(["reservation-results<br/>key: eventId"])
+        T5(["reservation-completed<br/>key: eventId"])
+    end
+
+    subgraph Processors["Kafka Streams Processors"]
+        P1["SeatEventMaterialize<br/>Processor"]
+        P2["ReservationCommand<br/>Processor"]
+        P3["SeatAllocation<br/>Processor"]
+        P4["ReservationResult<br/>Processor"]
+    end
+
+    subgraph Stores["State Stores"]
+        S1[("seat-inventory-store")]
+        S2[("reservation-store")]
+    end
+
+    TS -->|"key=eventId"| T1
+    RS -->|"key=eventId"| T2
+
+    T1 --> P1
+    P1 -->|"put(eventId-seatNumber)"| S1
+
+    T2 --> P2
+    P2 -->|"put(reservationId)"| S2
+    P2 -->|"forward"| T3
+
+    T3 --> P3
+    P3 -->|"prefixScan + update"| S1
+    P3 -->|"forward"| T4
+
+    T4 --> P4
+    P4 -->|"update status"| S2
+    P4 -->|"forward"| T5
+
+    T5 -.->|"future: event-driven<br/>DB sync + SSE"| Future["TBD"]
+
+    style T1 fill:#533483,stroke:#e94560,color:#fff
+    style T2 fill:#533483,stroke:#e94560,color:#fff
+    style T3 fill:#533483,stroke:#e94560,color:#fff
+    style T4 fill:#533483,stroke:#e94560,color:#fff
+    style T5 fill:#533483,stroke:#e94560,color:#fff
+    style S1 fill:#0f3460,stroke:#e94560,color:#fff
+    style S2 fill:#0f3460,stroke:#e94560,color:#fff
+    style Future fill:#1a1a2e,stroke:#666,color:#888,stroke-dasharray: 5 5
+  </pre>
+</div>
+
+<!-- ==================== SEAT ALLOCATION DETAIL ==================== -->
+<h2>3. Seat Allocation Flow (Single Reservation)</h2>
+<div class="diagram">
+  <pre class="mermaid">
+sequenceDiagram
+    participant Client as Browser / k6
+    participant RC as ReservationController
+    participant RS as ReservationService
+    participant K as Kafka
+    participant RCP as ReservationCommandProcessor
+    participant SAP as SeatAllocationProcessor
+    participant RRP as ReservationResultProcessor
+    participant SIS as seat-inventory-store
+    participant RES as reservation-store
+
+    Client->>RC: POST /api/reservations
+    RC->>RS: createReservation(request)
+    RS->>K: produce(reservation-commands, key=eventId)
+    RS-->>RC: reservationId
+    RC-->>Client: 202 Accepted {reservationId}
+
+    Note over K,RRP: Kafka Streams Processing (async, single thread per partition)
+
+    K->>RCP: consume reservation-commands
+    RCP->>RES: put(reservationId, PENDING)
+    RCP->>K: forward to reservation-requests
+
+    K->>SAP: consume reservation-requests
+    SAP->>SIS: prefixScan(eventId-section)
+    SIS-->>SAP: available seats
+    alt Enough consecutive seats
+        SAP->>SIS: mark seats RESERVED
+        SAP->>K: forward SUCCESS to reservation-results
+    else Not enough seats
+        SAP->>K: forward FAILURE to reservation-results
+    end
+
+    K->>RRP: consume reservation-results
+    RRP->>RES: update status (CONFIRMED/REJECTED)
+    RRP->>K: forward to reservation-completed
+
+    Note over Client,RC: Later: Client polls for result
+
+    Client->>RC: GET /api/reservations/{id}
+    RC->>RS: getReservation(id)
+    RS->>RES: Interactive Query: store.get(reservationId)
+    RES-->>RS: ReservationState
+    RS-->>RC: ReservationResponse
+    RC-->>Client: 200 {status, allocatedSeats}
+  </pre>
+</div>
+
+<!-- ==================== PARTITION STRATEGY ==================== -->
+<h2>4. Partition Key Strategy</h2>
+<div class="diagram">
+  <pre class="mermaid">
+graph TB
+    subgraph Event1["Partition N (eventId=1 hashes here)"]
+        direction TB
+        SE1["seat-events<br/>A-001 ~ A-100"]
+        RC1["reservation-commands<br/>all 100K requests"]
+        SI1[("seat-inventory-store<br/>100 seats for event 1")]
+        RS1[("reservation-store<br/>100K reservations")]
+
+        SE1 --> SI1
+        RC1 --> RS1
+    end
+
+    subgraph Event2["Partition M (eventId=2 hashes here)"]
+        direction TB
+        SE2["seat-events<br/>B-001 ~ B-500"]
+        RC2["reservation-commands<br/>requests for event 2"]
+        SI2[("seat-inventory-store<br/>500 seats for event 2")]
+        RS2[("reservation-store<br/>event 2 reservations")]
+
+        SE2 --> SI2
+        RC2 --> RS2
+    end
+
+    subgraph Key["Partition Key = eventId"]
+        direction LR
+        K1["Same eventId<br/>= same partition<br/>= same thread<br/>= sequential processing<br/>= NO LOCKS NEEDED"]
+    end
+
+    style Event1 fill:#16213e,stroke:#e94560,color:#fff
+    style Event2 fill:#16213e,stroke:#533483,color:#fff
+    style Key fill:#0f3460,stroke:#e94560,color:#fff
+    style K1 fill:#0f3460,stroke:#e94560,color:#fff
+  </pre>
+</div>
+
+<!-- ==================== TECH STACK ==================== -->
+<h2>5. Infrastructure</h2>
+<div class="diagram">
+  <pre class="mermaid">
+graph LR
+    subgraph Docker["Docker Compose"]
+        PG[("PostgreSQL<br/>:5432<br/>venues, events, tickets")]
+        Redis[("Redis<br/>:6379<br/>cache")]
+        Kafka["Kafka (KRaft)<br/>:9092<br/>single broker<br/>20 partitions/topic"]
+        LGTM["Grafana LGTM<br/>:3000 UI<br/>:4317/4318 OTLP"]
+    end
+
+    subgraph App["Spring Boot 4.0.2<br/>Java 25 + Virtual Threads"]
+        WEB["WebMVC<br/>(Tomcat)"]
+        JPA["Spring Data JPA<br/>(Hibernate)"]
+        KS["Kafka Streams<br/>(RocksDB state)"]
+        KP["KafkaTemplate<br/>(Producer)"]
+        OT["OpenTelemetry<br/>(Auto-instrument)"]
+    end
+
+    WEB --> JPA --> PG
+    WEB --> Redis
+    KP --> Kafka
+    Kafka --> KS
+    OT --> LGTM
+
+    style Kafka fill:#533483,stroke:#e94560,color:#fff
+    style KS fill:#533483,stroke:#e94560,color:#fff
+  </pre>
+</div>
+
+<div class="legend">
+  <strong>Key Design Decisions:</strong><br/>
+  <code>Partition Key = eventId</code> ensures all seats + reservations for the same event are processed by the same Kafka Streams thread (no locks needed)<br/>
+  <code>20 partitions</code> allows up to 20 different events to be processed in parallel<br/>
+  <code>Interactive Query</code> lets the HTTP layer read reservation state directly from RocksDB (no DB round-trip for polling)<br/>
+  <code>202 Accepted</code> + polling pattern decouples HTTP response time from Kafka processing latency<br/>
+  <code>reservation-completed</code> topic is available for future event-driven DB sync and SSE push<br/><br/>
+  <strong>Performance (local, single broker):</strong> ~18,000 RPS (POST), ~2,000 RPS (POST + poll), 0 duplicate seats guaranteed
+</div>
+
+</body>
+</html>

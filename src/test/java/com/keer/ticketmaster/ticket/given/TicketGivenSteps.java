@@ -5,6 +5,7 @@ import com.keer.ticketmaster.config.KafkaStreamsConfig;
 import com.keer.ticketmaster.event.model.Event;
 import com.keer.ticketmaster.event.repository.EventRepository;
 import com.keer.ticketmaster.ticket.event.SeatEvent;
+import com.keer.ticketmaster.ticket.model.SeatStateStatus;
 import com.keer.ticketmaster.ticket.model.Ticket;
 import com.keer.ticketmaster.ticket.repository.TicketRepository;
 import io.cucumber.datatable.DataTable;
@@ -58,7 +59,7 @@ public class TicketGivenSteps {
                     eventId,
                     seatNumber,
                     section,
-                    row.get("status"),
+                    SeatStateStatus.valueOf(row.get("status")),
                     Instant.now()
             );
             String seatKey = eventId + "-" + seatNumber;

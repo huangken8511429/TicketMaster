@@ -1,15 +1,16 @@
 package com.keer.ticketmaster.reservation.stream;
 
+import com.keer.ticketmaster.avro.ReservationCompletedEvent;
+import com.keer.ticketmaster.avro.ReservationResultEvent;
+import com.keer.ticketmaster.avro.ReservationState;
 import com.keer.ticketmaster.config.KafkaStreamsConfig;
-import com.keer.ticketmaster.reservation.event.ReservationCompletedEvent;
-import com.keer.ticketmaster.reservation.event.ReservationResultEvent;
-import com.keer.ticketmaster.reservation.model.ReservationState;
 import org.apache.kafka.streams.processor.api.Processor;
 import org.apache.kafka.streams.processor.api.ProcessorContext;
 import org.apache.kafka.streams.processor.api.Record;
 import org.apache.kafka.streams.state.KeyValueStore;
 
 import java.time.Instant;
+import java.util.List;
 
 public class ReservationResultProcessor
         implements Processor<String, ReservationResultEvent, String, ReservationCompletedEvent> {
@@ -28,30 +29,35 @@ public class ReservationResultProcessor
         ReservationResultEvent result = record.value();
         String reservationId = result.getReservationId();
 
-        // Update reservation-store
         ReservationState state = reservationStore.get(reservationId);
         if (state != null) {
-            if (result.isSuccess()) {
-                state.setStatus("CONFIRMED");
-                state.setAllocatedSeats(result.getAllocatedSeats());
+            ReservationState.Builder updated = ReservationState.newBuilder(state)
+                    .setUpdatedAt(Instant.now().toEpochMilli());
+
+            if (result.getSuccess()) {
+                updated.setStatus("CONFIRMED");
+                updated.setAllocatedSeats(result.getAllocatedSeats());
             } else {
-                state.setStatus("REJECTED");
+                updated.setStatus("REJECTED");
             }
-            state.setUpdatedAt(Instant.now());
-            reservationStore.put(reservationId, state);
+
+            reservationStore.put(reservationId, updated.build());
         }
 
-        // Forward ReservationCompletedEvent
-        String status = result.isSuccess() ? "CONFIRMED" : "REJECTED";
+        String status = result.getSuccess() ? "CONFIRMED" : "REJECTED";
         String userId = state != null ? state.getUserId() : "unknown";
+        long eventId = state != null ? state.getEventId() : 0L;
 
-        ReservationCompletedEvent completedEvent = new ReservationCompletedEvent(
-                reservationId,
-                userId,
-                status,
-                result.getAllocatedSeats(),
-                Instant.now()
-        );
-        context.forward(new Record<>(reservationId, completedEvent, record.timestamp()));
+        ReservationCompletedEvent completedEvent = ReservationCompletedEvent.newBuilder()
+                .setReservationId(reservationId)
+                .setEventId(eventId)
+                .setUserId(userId)
+                .setStatus(status)
+                .setAllocatedSeats(result.getAllocatedSeats() != null ? result.getAllocatedSeats() : List.of())
+                .setTimestamp(Instant.now().toEpochMilli())
+                .build();
+
+        String eventKey = eventId != 0 ? String.valueOf(eventId) : reservationId;
+        context.forward(new Record<>(eventKey, completedEvent, record.timestamp()));
     }
 }

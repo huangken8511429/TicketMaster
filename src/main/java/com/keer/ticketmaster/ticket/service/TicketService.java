@@ -1,11 +1,12 @@
 package com.keer.ticketmaster.ticket.service;
 
+import com.keer.ticketmaster.avro.SeatEvent;
+import com.keer.ticketmaster.avro.SeatStateStatus;
 import com.keer.ticketmaster.config.KafkaStreamsConfig;
 import com.keer.ticketmaster.event.model.Event;
 import com.keer.ticketmaster.event.repository.EventRepository;
 import com.keer.ticketmaster.ticket.dto.TicketRequest;
 import com.keer.ticketmaster.ticket.dto.TicketResponse;
-import com.keer.ticketmaster.ticket.event.SeatEvent;
 import com.keer.ticketmaster.ticket.model.Ticket;
 import com.keer.ticketmaster.ticket.repository.TicketRepository;
 import lombok.RequiredArgsConstructor;
@@ -36,17 +37,17 @@ public class TicketService {
         ticket.setStatus(Ticket.TicketStatus.AVAILABLE);
         Ticket saved = ticketRepository.save(ticket);
 
-        // Publish SeatEvent to Kafka for Streams topology materialization
         String section = extractSection(saved.getSeatNumber());
-        SeatEvent seatEvent = new SeatEvent(
-                event.getId(),
-                saved.getSeatNumber(),
-                section,
-                saved.getStatus().name(),
-                Instant.now()
-        );
-        String seatKey = event.getId() + "-" + saved.getSeatNumber();
-        kafkaTemplate.send(KafkaStreamsConfig.TOPIC_SEAT_EVENTS, seatKey, seatEvent);
+        SeatEvent seatEvent = SeatEvent.newBuilder()
+                .setEventId(event.getId())
+                .setSeatNumber(saved.getSeatNumber())
+                .setSection(section)
+                .setStatus(SeatStateStatus.AVAILABLE)
+                .setTimestamp(Instant.now().toEpochMilli())
+                .build();
+
+        String eventKey = event.getId().toString();
+        kafkaTemplate.send(KafkaStreamsConfig.TOPIC_SEAT_EVENTS, eventKey, seatEvent);
 
         return toResponse(saved);
     }
@@ -69,8 +70,8 @@ public class TicketService {
                 .toList();
     }
 
+    // Seat format: "A-001" → section "A"
     private String extractSection(String seatNumber) {
-        // Seat format: "A-001" → section "A"
         int dash = seatNumber.indexOf('-');
         return dash > 0 ? seatNumber.substring(0, dash) : seatNumber;
     }
