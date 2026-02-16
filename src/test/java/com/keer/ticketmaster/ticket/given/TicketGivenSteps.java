@@ -1,11 +1,11 @@
 package com.keer.ticketmaster.ticket.given;
 
 import com.keer.ticketmaster.ScenarioContext;
+import com.keer.ticketmaster.avro.SeatEvent;
+import com.keer.ticketmaster.avro.SeatStateStatus;
 import com.keer.ticketmaster.config.KafkaStreamsConfig;
 import com.keer.ticketmaster.event.model.Event;
 import com.keer.ticketmaster.event.repository.EventRepository;
-import com.keer.ticketmaster.ticket.event.SeatEvent;
-import com.keer.ticketmaster.ticket.model.SeatStateStatus;
 import com.keer.ticketmaster.ticket.model.Ticket;
 import com.keer.ticketmaster.ticket.repository.TicketRepository;
 import io.cucumber.datatable.DataTable;
@@ -52,18 +52,18 @@ public class TicketGivenSteps {
             ticket.setStatus(Ticket.TicketStatus.valueOf(row.get("status")));
             ticketRepository.save(ticket);
 
-            // Publish SeatEvent to Kafka for Streams topology materialization
+            // Publish Avro SeatEvent to Kafka for Streams topology materialization
             String seatNumber = row.get("seatNumber");
             String section = seatNumber.substring(0, seatNumber.indexOf('-'));
-            SeatEvent seatEvent = new SeatEvent(
-                    eventId,
-                    seatNumber,
-                    section,
-                    SeatStateStatus.valueOf(row.get("status")),
-                    Instant.now()
-            );
-            String seatKey = eventId + "-" + seatNumber;
-            kafkaTemplate.send(KafkaStreamsConfig.TOPIC_SEAT_EVENTS, seatKey, seatEvent).get(5, TimeUnit.SECONDS);
+            SeatEvent seatEvent = SeatEvent.newBuilder()
+                    .setEventId(eventId)
+                    .setSeatNumber(seatNumber)
+                    .setSection(section)
+                    .setStatus(SeatStateStatus.valueOf(row.get("status")))
+                    .setTimestamp(Instant.now().toEpochMilli())
+                    .build();
+            String eventKey = eventId.toString();
+            kafkaTemplate.send(KafkaStreamsConfig.TOPIC_SEAT_EVENTS, eventKey, seatEvent).get(5, TimeUnit.SECONDS);
         }
 
         // Wait for Kafka Streams to process seat events

@@ -49,23 +49,27 @@ public class ReservationService {
 
     public ReservationResponse getReservation(String reservationId) {
         KafkaStreams kafkaStreams = streamsBuilderFactoryBean.getKafkaStreams();
-        if (kafkaStreams == null) {
+        if (kafkaStreams == null || kafkaStreams.state() != KafkaStreams.State.RUNNING) {
             return null;
         }
 
-        ReadOnlyKeyValueStore<String, ReservationState> store = kafkaStreams.store(
-                StoreQueryParameters.fromNameAndType(
-                        KafkaStreamsConfig.RESERVATION_STORE,
-                        QueryableStoreTypes.keyValueStore()
-                )
-        );
+        try {
+            ReadOnlyKeyValueStore<String, ReservationState> store = kafkaStreams.store(
+                    StoreQueryParameters.fromNameAndType(
+                            KafkaStreamsConfig.RESERVATION_STORE,
+                            QueryableStoreTypes.keyValueStore()
+                    )
+            );
 
-        ReservationState state = store.get(reservationId);
-        if (state == null) {
+            ReservationState state = store.get(reservationId);
+            if (state == null) {
+                return null;
+            }
+
+            return toResponse(state);
+        } catch (Exception e) {
             return null;
         }
-
-        return toResponse(state);
     }
 
     public DeferredResult<ResponseEntity<ReservationResponse>> getReservationAsync(String reservationId) {

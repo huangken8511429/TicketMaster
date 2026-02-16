@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 public class ReservationThenSteps {
@@ -33,20 +34,32 @@ public class ReservationThenSteps {
         assertNotNull(reservationId, "應該有 reservationId");
 
         // Poll the GET endpoint until status changes from PENDING
+        // GET returns DeferredResult — use asyncDispatch for MockMvc
         ReservationResponse response = null;
         int maxAttempts = 30;
         for (int i = 0; i < maxAttempts; i++) {
-            MvcResult result = mockMvc.perform(
-                    get("/api/reservations/" + reservationId)
-                            .contentType(MediaType.APPLICATION_JSON))
-                    .andReturn();
+            try {
+                MvcResult asyncResult = mockMvc.perform(
+                        get("/api/reservations/" + reservationId)
+                                .contentType(MediaType.APPLICATION_JSON))
+                        .andReturn();
 
-            if (result.getResponse().getStatus() == 200) {
-                String body = result.getResponse().getContentAsString();
-                response = objectMapper.readValue(body, ReservationResponse.class);
-                if (!("PENDING".equals(response.getStatus()))) {
-                    break;
+                MvcResult result;
+                if (asyncResult.getRequest().isAsyncStarted()) {
+                    result = mockMvc.perform(asyncDispatch(asyncResult)).andReturn();
+                } else {
+                    result = asyncResult;
                 }
+
+                if (result.getResponse().getStatus() == 200) {
+                    String body = result.getResponse().getContentAsString();
+                    response = objectMapper.readValue(body, ReservationResponse.class);
+                    if (!("PENDING".equals(response.getStatus()))) {
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                // Kafka Streams may not be RUNNING yet — retry
             }
             Thread.sleep(500);
         }
