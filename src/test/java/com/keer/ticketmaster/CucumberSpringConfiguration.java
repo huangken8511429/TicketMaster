@@ -1,0 +1,22 @@
+package com.keer.ticketmaster;
+
+import io.cucumber.spring.CucumberContextConfiguration;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.kafka.test.context.EmbeddedKafka;
+
+@CucumberContextConfiguration
+@SpringBootTest
+@Import(TestConfig.class)
+@EmbeddedKafka(
+        partitions = 1,
+        topics = {
+                "seat-events",
+                "reservation-commands",
+                "reservation-requests",
+                "reservation-results",
+                "reservation-completed"
+        }
+)
+public class CucumberSpringConfiguration {
+}
