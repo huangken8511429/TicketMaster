@@ -2,7 +2,7 @@ package com.keer.ticketmaster.ticket.service;
 
 import com.keer.ticketmaster.avro.SeatEvent;
 import com.keer.ticketmaster.avro.SeatStateStatus;
-import com.keer.ticketmaster.config.KafkaStreamsConfig;
+import com.keer.ticketmaster.config.KafkaConstants;
 import com.keer.ticketmaster.event.model.Event;
 import com.keer.ticketmaster.event.repository.EventRepository;
 import com.keer.ticketmaster.ticket.dto.TicketRequest;
@@ -10,6 +10,7 @@ import com.keer.ticketmaster.ticket.dto.TicketResponse;
 import com.keer.ticketmaster.ticket.model.Ticket;
 import com.keer.ticketmaster.ticket.repository.TicketRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +18,7 @@ import java.time.Instant;
 import java.util.List;
 
 @Service
+@Profile({"api", "default"})
 @RequiredArgsConstructor
 public class TicketService {
 
@@ -47,7 +49,7 @@ public class TicketService {
                 .build();
 
         String eventKey = event.getId().toString();
-        kafkaTemplate.send(KafkaStreamsConfig.TOPIC_SEAT_EVENTS, eventKey, seatEvent);
+        kafkaTemplate.send(KafkaConstants.TOPIC_SEAT_EVENTS, eventKey, seatEvent);
 
         return toResponse(saved);
     }

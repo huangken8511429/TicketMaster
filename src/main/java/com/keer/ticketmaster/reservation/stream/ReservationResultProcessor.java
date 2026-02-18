@@ -3,7 +3,7 @@ package com.keer.ticketmaster.reservation.stream;
 import com.keer.ticketmaster.avro.ReservationCompletedEvent;
 import com.keer.ticketmaster.avro.ReservationResultEvent;
 import com.keer.ticketmaster.avro.ReservationState;
-import com.keer.ticketmaster.config.KafkaStreamsConfig;
+import com.keer.ticketmaster.config.KafkaConstants;
 import org.apache.kafka.streams.processor.api.Processor;
 import org.apache.kafka.streams.processor.api.ProcessorContext;
 import org.apache.kafka.streams.processor.api.Record;
@@ -21,7 +21,7 @@ public class ReservationResultProcessor
     @Override
     public void init(ProcessorContext<String, ReservationCompletedEvent> context) {
         this.context = context;
-        this.reservationStore = context.getStateStore(KafkaStreamsConfig.RESERVATION_STORE);
+        this.reservationStore = context.getStateStore(KafkaConstants.RESERVATION_STORE);
     }
 
     @Override
@@ -48,11 +48,16 @@ public class ReservationResultProcessor
         String userId = state != null ? state.getUserId() : "unknown";
         long eventId = state != null ? state.getEventId() : 0L;
 
+        String section = state != null ? state.getSection() : "";
+        int seatCount = state != null ? state.getSeatCount() : 0;
+
         ReservationCompletedEvent completedEvent = ReservationCompletedEvent.newBuilder()
                 .setReservationId(reservationId)
                 .setEventId(eventId)
                 .setUserId(userId)
                 .setStatus(status)
+                .setSection(section)
+                .setSeatCount(seatCount)
                 .setAllocatedSeats(result.getAllocatedSeats() != null ? result.getAllocatedSeats() : List.of())
                 .setTimestamp(Instant.now().toEpochMilli())
                 .build();

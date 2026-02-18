@@ -73,6 +73,10 @@ avro {
     outputCharacterEncoding = 'UTF-8'
 }
 
+tasks.named('bootRun') {
+    jvmArgs = ['-XX:+UseZGC', '-XX:+ZGenerational', '-Xmx2G', '-Xms2G', '-XX:+AlwaysPreTouch']
+}
+
 tasks.named('bootBuildImage') {
     runImage = 'paketobuildpacks/ubuntu-noble-run:latest'
 }

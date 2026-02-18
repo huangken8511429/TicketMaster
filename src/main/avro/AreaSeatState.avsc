@@ -1,0 +1,11 @@
+{
+  "type": "record",
+  "name": "AreaSeatState",
+  "namespace": "com.keer.ticketmaster.avro",
+  "fields": [
+    {"name": "eventId", "type": "long"},
+    {"name": "section", "type": "string"},
+    {"name": "seatStatuses", "type": {"type": "map", "values": "string"}},
+    {"name": "availableCount", "type": "int"}
+  ]
+}

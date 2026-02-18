@@ -3,6 +3,7 @@ package com.keer.ticketmaster.reservation.service;
 import com.keer.ticketmaster.avro.ReservationCompletedEvent;
 import com.keer.ticketmaster.reservation.dto.ReservationResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.async.DeferredResult;
@@ -10,6 +11,7 @@ import org.springframework.web.context.request.async.DeferredResult;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
+@Profile({"api", "default"})
 @Slf4j
 public class ReservationPendingRequests {
 
@@ -34,6 +36,8 @@ public class ReservationPendingRequests {
         ReservationResponse response = ReservationResponse.builder()
                 .reservationId(event.getReservationId())
                 .eventId(event.getEventId())
+                .section(event.getSection())
+                .seatCount(event.getSeatCount())
                 .userId(event.getUserId())
                 .status(event.getStatus())
                 .allocatedSeats(event.getAllocatedSeats())

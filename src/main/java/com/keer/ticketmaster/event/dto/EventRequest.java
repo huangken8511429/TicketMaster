@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -18,4 +19,6 @@ public class EventRequest {
     private LocalDate eventDate;
 
     private Long venueId;
+
+    private List<AreaRequest> areas;
 }

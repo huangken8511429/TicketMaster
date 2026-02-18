@@ -24,4 +24,6 @@ public class EventResponse {
     private Long venueId;
 
     private String venueName;
+
+    private Integer totalSeats;
 }

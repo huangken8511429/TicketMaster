@@ -3,7 +3,7 @@ package com.keer.ticketmaster.reservation.stream;
 import com.keer.ticketmaster.avro.ReservationCommand;
 import com.keer.ticketmaster.avro.ReservationRequestedEvent;
 import com.keer.ticketmaster.avro.ReservationState;
-import com.keer.ticketmaster.config.KafkaStreamsConfig;
+import com.keer.ticketmaster.config.KafkaConstants;
 import org.apache.kafka.streams.processor.api.Processor;
 import org.apache.kafka.streams.processor.api.ProcessorContext;
 import org.apache.kafka.streams.processor.api.Record;
@@ -21,7 +21,7 @@ public class ReservationCommandProcessor
     @Override
     public void init(ProcessorContext<String, ReservationRequestedEvent> context) {
         this.context = context;
-        this.reservationStore = context.getStateStore(KafkaStreamsConfig.RESERVATION_STORE);
+        this.reservationStore = context.getStateStore(KafkaConstants.RESERVATION_STORE);
     }
 
     @Override

@@ -3,12 +3,12 @@ import { check } from "k6";
 import { Counter, Rate } from "k6/metrics";
 
 // ---------------------------------------------------------------------------
-// Configuration
+// Configuration — round-robin across multiple instances
 // ---------------------------------------------------------------------------
-const BASE_URL = __ENV.BASE_URL || "http://localhost:8080";
+const ENDPOINTS = (__ENV.ENDPOINTS || "http://localhost:8080,http://localhost:8082,http://localhost:8083").split(",");
 const EVENT_ID = __ENV.EVENT_ID;
 if (!EVENT_ID) {
-  throw new Error("EVENT_ID is required. Run: k6 run -e EVENT_ID=<id> scripts/load-test-fire.js");
+  throw new Error("EVENT_ID is required. Run: k6 run -e EVENT_ID=<id> scripts/load-test-fire-scaled.js");
 }
 
 const VUS = Number(__ENV.VUS || 500);
@@ -40,13 +40,14 @@ const failedCounter = new Counter("reservations_failed");
 const acceptedRate = new Rate("reservation_accepted_rate");
 
 // ---------------------------------------------------------------------------
-// Main VU function — fire and forget, no polling
+// Main VU function — direct round-robin across instances
 // ---------------------------------------------------------------------------
 export default function () {
   const userId = `user-${__VU}-${__ITER}`;
+  const baseUrl = ENDPOINTS[__VU % ENDPOINTS.length];
 
   const res = http.post(
-    `${BASE_URL}/api/reservations`,
+    `${baseUrl}/api/reservations`,
     JSON.stringify({
       eventId: Number(EVENT_ID),
       section: "A",
@@ -96,7 +97,8 @@ export function handleSummary(data) {
     ? data.metrics.http_req_duration.values["p(99)"]
     : "N/A";
 
-  let summary = "\n=== Fire & Forget Load Test ===\n";
+  let summary = "\n=== Scaled Fire & Forget Load Test ===\n";
+  summary += `  Endpoints:   ${ENDPOINTS.join(", ")}\n`;
   summary += `  Iterations:  ${accepted + failed}\n`;
   summary += `  Accepted:    ${accepted} (HTTP 202)\n`;
   summary += `  Failed:      ${failed}\n`;
@@ -107,7 +109,7 @@ export function handleSummary(data) {
   summary += `    P50: ${typeof p50 === "number" ? p50.toFixed(1) : p50}ms\n`;
   summary += `    P95: ${typeof p95 === "number" ? p95.toFixed(1) : p95}ms\n`;
   summary += `    P99: ${typeof p99 === "number" ? p99.toFixed(1) : p99}ms\n`;
-  summary += `===============================\n`;
+  summary += `=====================================\n`;
 
   return { stdout: summary };
 }

@@ -32,7 +32,7 @@ public class EventWhenSteps {
     public void 我建立一個活動(String name, String description, String eventDate) throws Exception {
         Long venueId = (Long) scenarioContext.get("createdVenueId");
 
-        EventRequest request = new EventRequest(name, description, LocalDate.parse(eventDate), venueId);
+        EventRequest request = new EventRequest(name, description, LocalDate.parse(eventDate), venueId, null);
 
         MvcResult result = mockMvc.perform(
                 post("/api/events")

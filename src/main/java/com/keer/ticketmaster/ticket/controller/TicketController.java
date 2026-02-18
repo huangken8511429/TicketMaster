@@ -5,6 +5,7 @@ import com.keer.ticketmaster.ticket.dto.TicketResponse;
 import com.keer.ticketmaster.ticket.service.TicketService;
 import com.keer.ticketmaster.ticket.service.TicketSseService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +16,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/tickets")
+@Profile({"api", "default"})
 @RequiredArgsConstructor
 public class TicketController {
 

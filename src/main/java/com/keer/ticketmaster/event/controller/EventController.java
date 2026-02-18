@@ -4,6 +4,7 @@ import com.keer.ticketmaster.event.dto.EventRequest;
 import com.keer.ticketmaster.event.dto.EventResponse;
 import com.keer.ticketmaster.event.service.EventService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -12,6 +13,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/events")
+@Profile({"api", "default"})
 @RequiredArgsConstructor
 public class EventController {
 
