@@ -61,9 +61,8 @@ public class ReservationProcessorStreamsConfig {
         completedStream
                 .to(KafkaConstants.TOPIC_RESERVATION_COMPLETED, Produced.with(Serdes.String(), completedSerde));
 
-        // Step 5: reservation-completed → repartition by reservationId → query store
+        // Step 5: reservation-completed (already keyed by reservationId) → query store
         builder.stream(KafkaConstants.TOPIC_RESERVATION_COMPLETED, Consumed.with(Serdes.String(), completedSerde))
-                .selectKey((eventKey, event) -> event.getReservationId())
                 .toTable(
                         Materialized.<String, ReservationCompletedEvent, KeyValueStore<org.apache.kafka.common.utils.Bytes, byte[]>>as(KafkaConstants.RESERVATION_QUERY_STORE)
                                 .withKeySerde(Serdes.String())

@@ -20,5 +20,5 @@ public class EventRequest {
 
     private Long venueId;
 
-    private List<AreaRequest> areas;
+    private List<SectionRequest> sections;
 }

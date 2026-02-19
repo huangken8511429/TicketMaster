@@ -1,6 +1,6 @@
 package com.keer.ticketmaster.ticket.stream;
 
-import com.keer.ticketmaster.avro.AreaSeatState;
+import com.keer.ticketmaster.avro.SectionSeatState;
 import com.keer.ticketmaster.avro.ReservationRequestedEvent;
 import com.keer.ticketmaster.avro.ReservationResultEvent;
 import com.keer.ticketmaster.config.KafkaConstants;
@@ -21,7 +21,7 @@ public class SeatAllocationProcessor
 
     private final SeatAvailabilityChecker availableSeatCache;
     private ProcessorContext<String, ReservationResultEvent> context;
-    private KeyValueStore<String, AreaSeatState> seatStore;
+    private KeyValueStore<String, SectionSeatState> seatStore;
 
     public SeatAllocationProcessor(SeatAvailabilityChecker availableSeatCache) {
         this.availableSeatCache = availableSeatCache;
@@ -42,10 +42,10 @@ public class SeatAllocationProcessor
         int seatCount = request.getSeatCount();
 
         String storeKey = eventId + "-" + section;
-        AreaSeatState area = seatStore.get(storeKey);
+        SectionSeatState sectionState = seatStore.get(storeKey);
 
-        // Fast fail: no area data or not enough available seats
-        if (area == null || area.getAvailableCount() < seatCount) {
+        // Fast fail: no section data or not enough available seats
+        if (sectionState == null || sectionState.getAvailableCount() < seatCount) {
             ReservationResultEvent result = ReservationResultEvent.newBuilder()
                     .setReservationId(reservationId)
                     .setSuccess(false)
@@ -53,13 +53,12 @@ public class SeatAllocationProcessor
                     .setFailureReason("Not enough consecutive available seats in section " + section)
                     .setTimestamp(Instant.now().toEpochMilli())
                     .build();
-            String eventKey = String.valueOf(eventId);
-            context.forward(new Record<>(eventKey, result, record.timestamp()));
+            context.forward(new Record<>(reservationId, result, record.timestamp()));
             return;
         }
 
         // Collect available seats from the map
-        Map<String, String> seatStatuses = area.getSeatStatuses();
+        Map<String, String> seatStatuses = sectionState.getSeatStatuses();
         List<String> availableSeats = new ArrayList<>();
         for (Map.Entry<String, String> entry : seatStatuses.entrySet()) {
             if ("AVAILABLE".equals(entry.getValue())) {
@@ -76,9 +75,9 @@ public class SeatAllocationProcessor
             for (String seatNumber : allocatedSeats) {
                 seatStatuses.put(seatNumber, "RESERVED");
             }
-            area.setAvailableCount(area.getAvailableCount() - seatCount);
-            seatStore.put(storeKey, area);
-            availableSeatCache.set(eventId, section, area.getAvailableCount());
+            sectionState.setAvailableCount(sectionState.getAvailableCount() - seatCount);
+            seatStore.put(storeKey, sectionState);
+            availableSeatCache.set(eventId, section, sectionState.getAvailableCount());
 
             result = ReservationResultEvent.newBuilder()
                     .setReservationId(reservationId)
@@ -97,8 +96,7 @@ public class SeatAllocationProcessor
                     .build();
         }
 
-        String eventKey = String.valueOf(eventId);
-        context.forward(new Record<>(eventKey, result, record.timestamp()));
+        context.forward(new Record<>(reservationId, result, record.timestamp()));
     }
 
     private List<String> findConsecutiveSeats(List<String> availableSeats, int seatCount) {

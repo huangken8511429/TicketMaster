@@ -1,6 +1,6 @@
 package com.keer.ticketmaster.config;
 
-import com.keer.ticketmaster.avro.AreaSeatState;
+import com.keer.ticketmaster.avro.SectionSeatState;
 import com.keer.ticketmaster.avro.ReservationRequestedEvent;
 import com.keer.ticketmaster.avro.ReservationResultEvent;
 import com.keer.ticketmaster.avro.SeatEvent;
@@ -39,11 +39,11 @@ public class SeatProcessorStreamsConfig {
         Map<String, String> serdeConfig = Map.of("schema.registry.url", schemaRegistryUrl);
 
         SpecificAvroSerde<SeatEvent> seatEventSerde = newAvroSerde(serdeConfig);
-        SpecificAvroSerde<AreaSeatState> seatStateSerde = newAvroSerde(serdeConfig);
+        SpecificAvroSerde<SectionSeatState> seatStateSerde = newAvroSerde(serdeConfig);
         SpecificAvroSerde<ReservationRequestedEvent> requestedSerde = newAvroSerde(serdeConfig);
         SpecificAvroSerde<ReservationResultEvent> resultSerde = newAvroSerde(serdeConfig);
 
-        StoreBuilder<KeyValueStore<String, AreaSeatState>> seatStoreBuilder =
+        StoreBuilder<KeyValueStore<String, SectionSeatState>> seatStoreBuilder =
                 Stores.keyValueStoreBuilder(
                         Stores.persistentKeyValueStore(KafkaConstants.SEAT_INVENTORY_STORE),
                         Serdes.String(),

@@ -48,8 +48,8 @@ public class TicketService {
                 .setTimestamp(Instant.now().toEpochMilli())
                 .build();
 
-        String eventKey = event.getId().toString();
-        kafkaTemplate.send(KafkaConstants.TOPIC_SEAT_EVENTS, eventKey, seatEvent);
+        String seatKey = event.getId() + "-" + section;
+        kafkaTemplate.send(KafkaConstants.TOPIC_SEAT_EVENTS, seatKey, seatEvent);
 
         return toResponse(saved);
     }

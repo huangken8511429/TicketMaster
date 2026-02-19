@@ -1,6 +1,6 @@
 package com.keer.ticketmaster.ticket.stream;
 
-import com.keer.ticketmaster.avro.AreaSeatState;
+import com.keer.ticketmaster.avro.SectionSeatState;
 import com.keer.ticketmaster.avro.SeatEvent;
 import com.keer.ticketmaster.config.KafkaConstants;
 import com.keer.ticketmaster.reservation.service.SeatAvailabilityChecker;
@@ -14,7 +14,7 @@ import java.util.HashMap;
 public class SeatEventMaterializeProcessor implements Processor<String, SeatEvent, Void, Void> {
 
     private final SeatAvailabilityChecker availableSeatCache;
-    private KeyValueStore<String, AreaSeatState> seatStore;
+    private KeyValueStore<String, SectionSeatState> seatStore;
 
     public SeatEventMaterializeProcessor(SeatAvailabilityChecker availableSeatCache) {
         this.availableSeatCache = availableSeatCache;
@@ -30,9 +30,9 @@ public class SeatEventMaterializeProcessor implements Processor<String, SeatEven
         SeatEvent event = record.value();
         String storeKey = event.getEventId() + "-" + event.getSection();
 
-        AreaSeatState area = seatStore.get(storeKey);
-        if (area == null) {
-            area = AreaSeatState.newBuilder()
+        SectionSeatState sectionState = seatStore.get(storeKey);
+        if (sectionState == null) {
+            sectionState = SectionSeatState.newBuilder()
                     .setEventId(event.getEventId())
                     .setSection(event.getSection())
                     .setSeatStatuses(new HashMap<>())
@@ -40,21 +40,21 @@ public class SeatEventMaterializeProcessor implements Processor<String, SeatEven
                     .build();
         }
 
-        String previousStatus = area.getSeatStatuses().get(event.getSeatNumber());
+        String previousStatus = sectionState.getSeatStatuses().get(event.getSeatNumber());
         String newStatus = event.getStatus().name();
 
-        area.getSeatStatuses().put(event.getSeatNumber(), newStatus);
+        sectionState.getSeatStatuses().put(event.getSeatNumber(), newStatus);
 
         // Maintain availableCount
         boolean wasAvailable = "AVAILABLE".equals(previousStatus);
         boolean isAvailable = "AVAILABLE".equals(newStatus);
         if (!wasAvailable && isAvailable) {
-            area.setAvailableCount(area.getAvailableCount() + 1);
+            sectionState.setAvailableCount(sectionState.getAvailableCount() + 1);
         } else if (wasAvailable && !isAvailable) {
-            area.setAvailableCount(area.getAvailableCount() - 1);
+            sectionState.setAvailableCount(sectionState.getAvailableCount() - 1);
         }
 
-        seatStore.put(storeKey, area);
-        availableSeatCache.set(event.getEventId(), event.getSection(), area.getAvailableCount());
+        seatStore.put(storeKey, sectionState);
+        availableSeatCache.set(event.getEventId(), event.getSection(), sectionState.getAvailableCount());
     }
 }

@@ -49,7 +49,7 @@ public class ReservationService {
                     .build();
 
             kafkaTemplate.send(KafkaConstants.TOPIC_RESERVATION_COMPLETED,
-                    request.getEventId().toString(), rejectedEvent);
+                    reservationId, rejectedEvent);
 
             return new CreateResult(reservationId, "REJECTED");
         }
@@ -63,8 +63,7 @@ public class ReservationService {
                 .setTimestamp(Instant.now().toEpochMilli())
                 .build();
 
-        String eventKey = request.getEventId().toString();
-        kafkaTemplate.send(KafkaConstants.TOPIC_RESERVATION_COMMANDS, eventKey, command);
+        kafkaTemplate.send(KafkaConstants.TOPIC_RESERVATION_COMMANDS, reservationId, command);
 
         return new CreateResult(reservationId, null);
     }

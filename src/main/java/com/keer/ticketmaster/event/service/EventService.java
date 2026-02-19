@@ -3,7 +3,7 @@ package com.keer.ticketmaster.event.service;
 import com.keer.ticketmaster.avro.SeatEvent;
 import com.keer.ticketmaster.avro.SeatStateStatus;
 import com.keer.ticketmaster.config.KafkaConstants;
-import com.keer.ticketmaster.event.dto.AreaRequest;
+import com.keer.ticketmaster.event.dto.SectionRequest;
 import com.keer.ticketmaster.event.dto.EventRequest;
 import com.keer.ticketmaster.event.dto.EventResponse;
 import com.keer.ticketmaster.event.model.Event;
@@ -41,9 +41,9 @@ public class EventService {
         Event saved = eventRepository.save(event);
 
         int totalSeats = 0;
-        if (request.getAreas() != null) {
-            for (AreaRequest area : request.getAreas()) {
-                totalSeats += publishSeatEvents(saved.getId(), area);
+        if (request.getSections() != null) {
+            for (SectionRequest section : request.getSections()) {
+                totalSeats += publishSeatEvents(saved.getId(), section);
             }
         }
 
@@ -62,15 +62,15 @@ public class EventService {
                 .toList();
     }
 
-    private int publishSeatEvents(Long eventId, AreaRequest area) {
-        String key = eventId.toString();
+    private int publishSeatEvents(Long eventId, SectionRequest section) {
+        String key = eventId + "-" + section.getSection();
         int count = 0;
-        for (int row = 1; row <= area.getRows(); row++) {
-            for (int col = 1; col <= area.getSeatsPerRow(); col++) {
+        for (int row = 1; row <= section.getRows(); row++) {
+            for (int col = 1; col <= section.getSeatsPerRow(); col++) {
                 SeatEvent seatEvent = SeatEvent.newBuilder()
                         .setEventId(eventId)
                         .setSeatNumber("R" + row + "-" + col)
-                        .setSection(area.getSection())
+                        .setSection(section.getSection())
                         .setStatus(SeatStateStatus.AVAILABLE)
                         .setTimestamp(Instant.now().toEpochMilli())
                         .build();

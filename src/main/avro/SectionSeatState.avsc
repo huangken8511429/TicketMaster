@@ -1,6 +1,6 @@
 {
   "type": "record",
-  "name": "AreaSeatState",
+  "name": "SectionSeatState",
   "namespace": "com.keer.ticketmaster.avro",
   "fields": [
     {"name": "eventId", "type": "long"},

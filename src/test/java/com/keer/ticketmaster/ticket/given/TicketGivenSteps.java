@@ -62,7 +62,7 @@ public class TicketGivenSteps {
                     .setStatus(SeatStateStatus.valueOf(row.get("status")))
                     .setTimestamp(Instant.now().toEpochMilli())
                     .build();
-            String eventKey = eventId.toString();
+            String eventKey = eventId + "-" + section;
             kafkaTemplate.send(KafkaConstants.TOPIC_SEAT_EVENTS, eventKey, seatEvent).get(5, TimeUnit.SECONDS);
         }
 

@@ -62,7 +62,6 @@ public class ReservationResultProcessor
                 .setTimestamp(Instant.now().toEpochMilli())
                 .build();
 
-        String eventKey = eventId != 0 ? String.valueOf(eventId) : reservationId;
-        context.forward(new Record<>(eventKey, completedEvent, record.timestamp()));
+        context.forward(new Record<>(reservationId, completedEvent, record.timestamp()));
     }
 }

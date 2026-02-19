@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class AreaRequest {
+public class SectionRequest {
     private String section;
     private int rows;
     private int seatsPerRow;

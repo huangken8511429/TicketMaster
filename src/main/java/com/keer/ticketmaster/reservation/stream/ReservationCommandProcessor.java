@@ -51,7 +51,7 @@ public class ReservationCommandProcessor
                 .setTimestamp(Instant.now().toEpochMilli())
                 .build();
 
-        String eventKey = String.valueOf(command.getEventId());
-        context.forward(new Record<>(eventKey, event, record.timestamp()));
+        String seatKey = command.getEventId() + "-" + command.getSection();
+        context.forward(new Record<>(seatKey, event, record.timestamp()));
     }
 }
