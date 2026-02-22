@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "name": "SectionInitCommand",
+  "namespace": "com.keer.ticketmaster.avro",
+  "fields": [
+    {"name": "eventId", "type": "long"},
+    {"name": "section", "type": "string"},
+    {"name": "rows", "type": "int"},
+    {"name": "seatsPerRow", "type": "int"},
+    {"name": "initialReserved", "type": {"type": "array", "items": "string"}, "default": []}
+  ]
+}

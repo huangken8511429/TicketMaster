@@ -9,8 +9,13 @@ import org.springframework.kafka.config.TopicBuilder;
 public class KafkaTopicConfig {
 
     @Bean
-    public NewTopic seatEventsTopic() {
-        return TopicBuilder.name(KafkaConstants.TOPIC_SEAT_EVENTS).partitions(20).replicas(1).build();
+    public NewTopic sectionInitTopic() {
+        return TopicBuilder.name(KafkaConstants.TOPIC_SECTION_INIT).partitions(20).replicas(1).build();
+    }
+
+    @Bean
+    public NewTopic sectionStatusTopic() {
+        return TopicBuilder.name(KafkaConstants.TOPIC_SECTION_STATUS).partitions(20).replicas(1).build();
     }
 
     @Bean
@@ -21,11 +26,6 @@ public class KafkaTopicConfig {
     @Bean
     public NewTopic reservationRequestsTopic() {
         return TopicBuilder.name(KafkaConstants.TOPIC_RESERVATION_REQUESTS).partitions(20).replicas(1).build();
-    }
-
-    @Bean
-    public NewTopic reservationResultsTopic() {
-        return TopicBuilder.name(KafkaConstants.TOPIC_RESERVATION_RESULTS).partitions(20).replicas(1).build();
     }
 
     @Bean

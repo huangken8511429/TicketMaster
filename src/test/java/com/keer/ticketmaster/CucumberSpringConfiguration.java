@@ -11,10 +11,10 @@ import org.springframework.kafka.test.context.EmbeddedKafka;
 @EmbeddedKafka(
         partitions = 1,
         topics = {
-                "seat-events",
+                "section-init",
+                "section-status",
                 "reservation-commands",
                 "reservation-requests",
-                "reservation-results",
                 "reservation-completed"
         }
 )

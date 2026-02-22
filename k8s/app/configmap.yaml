@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ticketmaster-config
+  namespace: ticketmaster
+data:
+  # Shared infrastructure endpoints (override application.properties defaults)
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres.ticketmaster.svc.cluster.local:5432/mydatabase"
+  SPRING_DATASOURCE_USERNAME: "myuser"
+  SPRING_DATASOURCE_PASSWORD: "secret"
+  SPRING_DATA_REDIS_HOST: "redis.ticketmaster.svc.cluster.local"
+  SPRING_DATA_REDIS_PORT: "6379"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka.ticketmaster.svc.cluster.local:9092"
+  SPRING_KAFKA_STREAMS_PROPERTIES_SCHEMA_REGISTRY_URL: "http://schema-registry.ticketmaster.svc.cluster.local:8081"
+  SPRING_KAFKA_PRODUCER_PROPERTIES_SCHEMA_REGISTRY_URL: "http://schema-registry.ticketmaster.svc.cluster.local:8081"
+  SPRING_KAFKA_CONSUMER_PROPERTIES_SCHEMA_REGISTRY_URL: "http://schema-registry.ticketmaster.svc.cluster.local:8081"
+  # Disable OTel for load test (must be valid URL or excluded via autoconfigure)
+  MANAGEMENT_TRACING_ENABLED: "false"
+  MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED: "false"
+  MANAGEMENT_OTLP_LOGGING_EXPORT_ENABLED: "false"

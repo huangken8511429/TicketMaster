@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seat-processor
+  namespace: ticketmaster
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: seat-processor
+  template:
+    metadata:
+      labels:
+        app: seat-processor
+    spec:
+      containers:
+        - name: seat-processor
+          image: ticketmaster:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: seat-processor
+            # Kafka Streams + RocksDB: needs more heap and CPU
+            - name: JAVA_OPTS
+              value: "-XX:+UseZGC -XX:+ZGenerational -Xmx2g -Xms2g -XX:+AlwaysPreTouch"
+          envFrom:
+            - configMapRef:
+                name: ticketmaster-config
+          resources:
+            requests:
+              cpu: "2"
+              memory: 2Gi
+            limits:
+              cpu: "4"
+              memory: 4Gi

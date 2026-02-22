@@ -9,11 +9,11 @@
     假如 系統中已存在一個活動，名稱為「五月天演唱會」，描述為「五月天 2026 巡迴演唱會」，日期為「2026-06-15」，關聯場館為該場館
     假如 該活動已存在以下票券:
       | seatNumber | price | status    |
-      | A-001      | 2800  | AVAILABLE |
-      | A-002      | 2800  | AVAILABLE |
-      | A-003      | 2800  | AVAILABLE |
-      | A-004      | 2800  | AVAILABLE |
-      | A-005      | 2800  | AVAILABLE |
+      | A-1        | 2800  | AVAILABLE |
+      | A-2        | 2800  | AVAILABLE |
+      | A-3        | 2800  | AVAILABLE |
+      | A-4        | 2800  | AVAILABLE |
+      | A-5        | 2800  | AVAILABLE |
     當 使用者「user001」預訂活動的「A」區 3 個連續座位
     那麼 系統應該回傳 202 Accepted
     並且 等待預定處理完成後，預定狀態應為「CONFIRMED」
@@ -24,9 +24,9 @@
     假如 系統中已存在一個活動，名稱為「五月天演唱會」，描述為「五月天 2026 巡迴演唱會」，日期為「2026-06-15」，關聯場館為該場館
     假如 該活動已存在以下票券:
       | seatNumber | price | status    |
-      | A-001      | 2800  | AVAILABLE |
-      | A-002      | 2800  | RESERVED  |
-      | A-003      | 2800  | AVAILABLE |
+      | A-1        | 2800  | AVAILABLE |
+      | A-2        | 2800  | RESERVED  |
+      | A-3        | 2800  | AVAILABLE |
     當 使用者「user001」預訂活動的「A」區 3 個連續座位
     那麼 系統應該回傳 202 Accepted
     並且 等待預定處理完成後，預定狀態應為「REJECTED」

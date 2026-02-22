@@ -1,7 +1,6 @@
 package com.keer.ticketmaster.event.service;
 
-import com.keer.ticketmaster.avro.SeatEvent;
-import com.keer.ticketmaster.avro.SeatStateStatus;
+import com.keer.ticketmaster.avro.SectionInitCommand;
 import com.keer.ticketmaster.config.KafkaConstants;
 import com.keer.ticketmaster.event.dto.SectionRequest;
 import com.keer.ticketmaster.event.dto.EventRequest;
@@ -15,7 +14,6 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
 import java.util.List;
 
 @Service
@@ -43,7 +41,7 @@ public class EventService {
         int totalSeats = 0;
         if (request.getSections() != null) {
             for (SectionRequest section : request.getSections()) {
-                totalSeats += publishSeatEvents(saved.getId(), section);
+                totalSeats += publishSectionInit(saved.getId(), section);
             }
         }
 
@@ -62,23 +60,20 @@ public class EventService {
                 .toList();
     }
 
-    private int publishSeatEvents(Long eventId, SectionRequest section) {
+    private int publishSectionInit(Long eventId, SectionRequest section) {
         String key = eventId + "-" + section.getSection();
-        int count = 0;
-        for (int row = 1; row <= section.getRows(); row++) {
-            for (int col = 1; col <= section.getSeatsPerRow(); col++) {
-                SeatEvent seatEvent = SeatEvent.newBuilder()
-                        .setEventId(eventId)
-                        .setSeatNumber("R" + row + "-" + col)
-                        .setSection(section.getSection())
-                        .setStatus(SeatStateStatus.AVAILABLE)
-                        .setTimestamp(Instant.now().toEpochMilli())
-                        .build();
-                kafkaTemplate.send(KafkaConstants.TOPIC_SEAT_EVENTS, key, seatEvent);
-                count++;
-            }
-        }
-        return count;
+        int totalSeats = section.getRows() * section.getSeatsPerRow();
+
+        SectionInitCommand command = SectionInitCommand.newBuilder()
+                .setEventId(eventId)
+                .setSection(section.getSection())
+                .setRows(section.getRows())
+                .setSeatsPerRow(section.getSeatsPerRow())
+                .setInitialReserved(List.of())
+                .build();
+
+        kafkaTemplate.send(KafkaConstants.TOPIC_SECTION_INIT, key, command);
+        return totalSeats;
     }
 
     private EventResponse toResponse(Event event, Integer totalSeats) {

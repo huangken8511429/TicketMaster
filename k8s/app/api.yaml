@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: ticketmaster
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: ticketmaster:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: api
+            - name: RESERVATION_PROCESSOR_URL
+              value: "http://reservation-processor.ticketmaster.svc.cluster.local:8180"
+            # ZGC + larger heap for 1M DeferredResults
+            - name: JAVA_OPTS
+              value: "-XX:+UseZGC -XX:+ZGenerational -Xmx1g -Xms1g -XX:+AlwaysPreTouch"
+          envFrom:
+            - configMapRef:
+                name: ticketmaster-config
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              cpu: "4"
+              memory: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: ticketmaster
+spec:
+  type: LoadBalancer
+  selector:
+    app: api
+  ports:
+    - port: 8080
+      targetPort: 8080

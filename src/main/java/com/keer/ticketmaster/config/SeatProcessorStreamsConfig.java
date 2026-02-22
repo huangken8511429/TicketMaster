@@ -1,12 +1,12 @@
 package com.keer.ticketmaster.config;
 
 import com.keer.ticketmaster.avro.SectionSeatState;
+import com.keer.ticketmaster.avro.ReservationCompletedEvent;
 import com.keer.ticketmaster.avro.ReservationRequestedEvent;
-import com.keer.ticketmaster.avro.ReservationResultEvent;
-import com.keer.ticketmaster.avro.SeatEvent;
-import com.keer.ticketmaster.reservation.service.SeatAvailabilityChecker;
+import com.keer.ticketmaster.avro.SectionInitCommand;
 import com.keer.ticketmaster.ticket.stream.SeatAllocationProcessor;
-import com.keer.ticketmaster.ticket.stream.SeatEventMaterializeProcessor;
+import com.keer.ticketmaster.ticket.stream.SectionInitProcessor;
+import com.keer.ticketmaster.ticket.stream.SectionStatusEmitter;
 import io.confluent.kafka.streams.serdes.avro.SpecificAvroSerde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.StreamsBuilder;
@@ -32,16 +32,15 @@ public class SeatProcessorStreamsConfig {
     private String schemaRegistryUrl;
 
     @Bean
-    public org.apache.kafka.streams.kstream.KStream<String, ReservationResultEvent> seatPipeline(
-            StreamsBuilder builder,
-            SeatAvailabilityChecker availableSeatCache) {
+    public org.apache.kafka.streams.kstream.KStream<String, ReservationCompletedEvent> seatPipeline(
+            StreamsBuilder builder) {
 
         Map<String, String> serdeConfig = Map.of("schema.registry.url", schemaRegistryUrl);
 
-        SpecificAvroSerde<SeatEvent> seatEventSerde = newAvroSerde(serdeConfig);
+        SpecificAvroSerde<SectionInitCommand> sectionInitSerde = newAvroSerde(serdeConfig);
         SpecificAvroSerde<SectionSeatState> seatStateSerde = newAvroSerde(serdeConfig);
         SpecificAvroSerde<ReservationRequestedEvent> requestedSerde = newAvroSerde(serdeConfig);
-        SpecificAvroSerde<ReservationResultEvent> resultSerde = newAvroSerde(serdeConfig);
+        SpecificAvroSerde<ReservationCompletedEvent> completedSerde = newAvroSerde(serdeConfig);
 
         StoreBuilder<KeyValueStore<String, SectionSeatState>> seatStoreBuilder =
                 Stores.keyValueStoreBuilder(
@@ -51,14 +50,21 @@ public class SeatProcessorStreamsConfig {
                 );
         builder.addStateStore(seatStoreBuilder);
 
-        // Step 1: seat-events → materialize to seat-inventory-store
-        builder.stream(KafkaConstants.TOPIC_SEAT_EVENTS, Consumed.with(Serdes.String(), seatEventSerde))
-                .process(() -> new SeatEventMaterializeProcessor(availableSeatCache), KafkaConstants.SEAT_INVENTORY_STORE);
+        // Init path: section-init → SectionInitProcessor → section-status
+        builder.stream(KafkaConstants.TOPIC_SECTION_INIT, Consumed.with(Serdes.String(), sectionInitSerde))
+                .process(SectionInitProcessor::new, KafkaConstants.SEAT_INVENTORY_STORE)
+                .to(KafkaConstants.TOPIC_SECTION_STATUS, Produced.with(Serdes.String(), seatStateSerde));
 
-        // Step 3: reservation-requests → SeatAllocationProcessor → reservation-results
-        builder.stream(KafkaConstants.TOPIC_RESERVATION_REQUESTS, Consumed.with(Serdes.String(), requestedSerde))
-                .process(() -> new SeatAllocationProcessor(availableSeatCache), KafkaConstants.SEAT_INVENTORY_STORE)
-                .to(KafkaConstants.TOPIC_RESERVATION_RESULTS, Produced.with(Serdes.String(), resultSerde));
+        // Allocation path: reservation-requests → SeatAllocationProcessor → reservation-completed
+        var completedStream = builder.stream(KafkaConstants.TOPIC_RESERVATION_REQUESTS, Consumed.with(Serdes.String(), requestedSerde))
+                .process(SeatAllocationProcessor::new, KafkaConstants.SEAT_INVENTORY_STORE);
+
+        completedStream.to(KafkaConstants.TOPIC_RESERVATION_COMPLETED, Produced.with(Serdes.String(), completedSerde));
+
+        // State sharing path: allocation results → SectionStatusEmitter → section-status
+        completedStream
+                .process(SectionStatusEmitter::new, KafkaConstants.SEAT_INVENTORY_STORE)
+                .to(KafkaConstants.TOPIC_SECTION_STATUS, Produced.with(Serdes.String(), seatStateSerde));
 
         return null;
     }

@@ -1,6 +1,0 @@
-{
-  "type": "enum",
-  "name": "SeatStateStatus",
-  "namespace": "com.keer.ticketmaster.avro",
-  "symbols": ["AVAILABLE", "RESERVED", "SOLD"]
-}

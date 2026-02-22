@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reservation-processor
+  namespace: ticketmaster
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: reservation-processor
+  template:
+    metadata:
+      labels:
+        app: reservation-processor
+    spec:
+      containers:
+        - name: reservation-processor
+          image: ticketmaster:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: reservation-processor
+            # Interactive query needs routable Pod IP
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: KAFKA_STREAMS_APP_SERVER
+              value: "$(POD_IP):8180"
+            - name: JAVA_OPTS
+              value: "-XX:+UseZGC -XX:+ZGenerational -Xmx1g -Xms1g -XX:+AlwaysPreTouch"
+          envFrom:
+            - configMapRef:
+                name: ticketmaster-config
+          ports:
+            - containerPort: 8180
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8180
+            initialDelaySeconds: 30
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8180
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+---
+# Headless service for interactive query (pod-to-pod direct routing)
+apiVersion: v1
+kind: Service
+metadata:
+  name: reservation-processor
+  namespace: ticketmaster
+spec:
+  selector:
+    app: reservation-processor
+  ports:
+    - port: 8180
+      targetPort: 8180
