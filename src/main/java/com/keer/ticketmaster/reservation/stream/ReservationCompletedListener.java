@@ -2,6 +2,7 @@ package com.keer.ticketmaster.reservation.stream;
 
 import com.keer.ticketmaster.avro.ReservationCompletedEvent;
 import com.keer.ticketmaster.reservation.service.ReservationPendingRequests;
+import com.keer.ticketmaster.ticket.service.TicketService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
 public class ReservationCompletedListener {
 
     private final ReservationPendingRequests pendingRequests;
+    private final TicketService ticketService;
 
     @KafkaListener(
             topics = "reservation-completed",
@@ -31,5 +33,11 @@ public class ReservationCompletedListener {
         log.debug("Received reservation-completed event: reservationId={}, status={}",
                 event.getReservationId(), event.getStatus());
         pendingRequests.resolve(event);
+
+        // Evict tickets cache when reservation is confirmed (inventory changed)
+        if ("CONFIRMED".equalsIgnoreCase(event.getStatus())) {
+            ticketService.evictAvailableTicketsCache(event.getEventId());
+            log.debug("Evicted tickets cache for eventId={}", event.getEventId());
+        }
     }
 }
