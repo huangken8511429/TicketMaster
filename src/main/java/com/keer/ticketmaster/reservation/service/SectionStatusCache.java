@@ -1,6 +1,6 @@
 package com.keer.ticketmaster.reservation.service;
 
-import com.keer.ticketmaster.avro.SectionSeatState;
+import com.keer.ticketmaster.avro.SectionStatusEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.context.annotation.Profile;
@@ -25,11 +25,11 @@ public class SectionStatusCache implements SeatAvailabilityChecker {
                     "specific.avro.reader=true"
             }
     )
-    public void onSectionStatus(ConsumerRecord<String, SectionSeatState> record) {
-        SectionSeatState state = record.value();
-        String key = state.getEventId() + "-" + state.getSection();
-        availableCounts.put(key, state.getAvailableCount());
-        log.debug("Section status updated: {}={}", key, state.getAvailableCount());
+    public void onSectionStatus(ConsumerRecord<String, SectionStatusEvent> record) {
+        SectionStatusEvent statusEvent = record.value();
+        String key = statusEvent.getEventId() + "-" + statusEvent.getSection();
+        availableCounts.put(key, statusEvent.getAvailableCount());
+        log.debug("Section status updated: {}={}", key, statusEvent.getAvailableCount());
     }
 
     @Override

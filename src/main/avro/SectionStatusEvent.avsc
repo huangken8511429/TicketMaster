@@ -1,0 +1,11 @@
+{
+  "type": "record",
+  "name": "SectionStatusEvent",
+  "namespace": "com.keer.ticketmaster.avro",
+  "fields": [
+    {"name": "eventId", "type": "long"},
+    {"name": "section", "type": "string"},
+    {"name": "availableCount", "type": "int"},
+    {"name": "timestamp", "type": "long", "logicalType": "timestamp-millis"}
+  ]
+}

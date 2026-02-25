@@ -4,6 +4,7 @@ import com.keer.ticketmaster.avro.SectionSeatState;
 import com.keer.ticketmaster.avro.ReservationCompletedEvent;
 import com.keer.ticketmaster.avro.ReservationRequestedEvent;
 import com.keer.ticketmaster.avro.SectionInitCommand;
+import com.keer.ticketmaster.avro.SectionStatusEvent;
 import com.keer.ticketmaster.ticket.stream.SeatAllocationProcessor;
 import com.keer.ticketmaster.ticket.stream.SectionInitProcessor;
 import com.keer.ticketmaster.ticket.stream.SectionStatusEmitter;
@@ -39,6 +40,7 @@ public class SeatProcessorStreamsConfig {
 
         SpecificAvroSerde<SectionInitCommand> sectionInitSerde = newAvroSerde(serdeConfig);
         SpecificAvroSerde<SectionSeatState> seatStateSerde = newAvroSerde(serdeConfig);
+        SpecificAvroSerde<SectionStatusEvent> statusEventSerde = newAvroSerde(serdeConfig);
         SpecificAvroSerde<ReservationRequestedEvent> requestedSerde = newAvroSerde(serdeConfig);
         SpecificAvroSerde<ReservationCompletedEvent> completedSerde = newAvroSerde(serdeConfig);
 
@@ -50,10 +52,17 @@ public class SeatProcessorStreamsConfig {
                 );
         builder.addStateStore(seatStoreBuilder);
 
-        // Init path: section-init → SectionInitProcessor → section-status
+        // Init path: section-init → SectionInitProcessor → convert to SectionStatusEvent → section-status
         builder.stream(KafkaConstants.TOPIC_SECTION_INIT, Consumed.with(Serdes.String(), sectionInitSerde))
                 .process(SectionInitProcessor::new, KafkaConstants.SEAT_INVENTORY_STORE)
-                .to(KafkaConstants.TOPIC_SECTION_STATUS, Produced.with(Serdes.String(), seatStateSerde));
+                .mapValues((org.apache.kafka.streams.kstream.ValueMapper<SectionSeatState, SectionStatusEvent>) state ->
+                        SectionStatusEvent.newBuilder()
+                                .setEventId(state.getEventId())
+                                .setSection(state.getSection())
+                                .setAvailableCount(state.getAvailableCount())
+                                .setTimestamp(System.currentTimeMillis())
+                                .build())
+                .to(KafkaConstants.TOPIC_SECTION_STATUS, Produced.with(Serdes.String(), statusEventSerde));
 
         // Allocation path: reservation-requests → SeatAllocationProcessor → reservation-completed
         var completedStream = builder.stream(KafkaConstants.TOPIC_RESERVATION_REQUESTS, Consumed.with(Serdes.String(), requestedSerde))
@@ -61,10 +70,17 @@ public class SeatProcessorStreamsConfig {
 
         completedStream.to(KafkaConstants.TOPIC_RESERVATION_COMPLETED, Produced.with(Serdes.String(), completedSerde));
 
-        // State sharing path: allocation results → SectionStatusEmitter → section-status
+        // State sharing path: allocation results → SectionStatusEmitter → convert to SectionStatusEvent → section-status
         completedStream
                 .process(SectionStatusEmitter::new, KafkaConstants.SEAT_INVENTORY_STORE)
-                .to(KafkaConstants.TOPIC_SECTION_STATUS, Produced.with(Serdes.String(), seatStateSerde));
+                .mapValues((org.apache.kafka.streams.kstream.ValueMapper<SectionSeatState, SectionStatusEvent>) state ->
+                        SectionStatusEvent.newBuilder()
+                                .setEventId(state.getEventId())
+                                .setSection(state.getSection())
+                                .setAvailableCount(state.getAvailableCount())
+                                .setTimestamp(System.currentTimeMillis())
+                                .build())
+                .to(KafkaConstants.TOPIC_SECTION_STATUS, Produced.with(Serdes.String(), statusEventSerde));
 
         return null;
     }
