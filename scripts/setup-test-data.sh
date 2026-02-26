@@ -1,96 +1,83 @@
 #!/usr/bin/env bash
+# setup-test-data.sh — Create venue + event in a running TicketMaster instance.
+# Usage: BASE_URL=http://api.example.com:8080 NUM_SECTIONS=20 ./scripts/setup-test-data.sh
+
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:8080}"
-TICKET_COUNT="${TICKET_COUNT:-100}"
-PRICE="${PRICE:-2800}"
-KAFKA_WAIT="${KAFKA_WAIT:-3}"
+NUM_SECTIONS="${NUM_SECTIONS:-20}"
+ROWS=20
+SEATS_PER_ROW=20
 
-echo "=== TicketMaster Load Test Data Setup ==="
-echo "Base URL: ${BASE_URL}"
-echo "Tickets:  ${TICKET_COUNT}"
+echo "=== TicketMaster Test Data Setup ==="
+echo "  BASE_URL:     $BASE_URL"
+echo "  NUM_SECTIONS: $NUM_SECTIONS"
 echo ""
-
-# Check dependencies
-if ! command -v jq &>/dev/null; then
-  echo "ERROR: jq is required. Install with: brew install jq"
-  exit 1
-fi
-
-if ! curl -sf "${BASE_URL}/api/venues" -o /dev/null 2>/dev/null; then
-  echo "ERROR: Application not reachable at ${BASE_URL}"
-  echo "Start it first: ./gradlew bootRun"
-  exit 1
-fi
 
 # 1. Create venue
-echo "[1/4] Creating venue..."
-VENUE_RESPONSE=$(curl -sf -X POST "${BASE_URL}/api/venues" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Taipei Arena",
-    "address": "No. 2, Nanjing East Road, Taipei",
-    "capacity": 15000
-  }')
-
-VENUE_ID=$(echo "${VENUE_RESPONSE}" | jq -r '.id')
-echo "  Venue created: id=${VENUE_ID}"
-
-# 2. Create event
-echo "[2/4] Creating event..."
-EVENT_RESPONSE=$(curl -sf -X POST "${BASE_URL}/api/events" \
+CAPACITY=$(( NUM_SECTIONS * ROWS * SEATS_PER_ROW ))
+VENUE_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/venues" \
   -H "Content-Type: application/json" \
   -d "{
-    \"name\": \"Load Test Concert\",
-    \"description\": \"High concurrency load test event\",
-    \"eventDate\": \"2026-06-15\",
-    \"venueId\": ${VENUE_ID}
+    \"name\": \"perf-venue-$(date +%s)\",
+    \"address\": \"Setup Script\",
+    \"capacity\": $CAPACITY
   }")
 
-EVENT_ID=$(echo "${EVENT_RESPONSE}" | jq -r '.id')
-echo "  Event created: id=${EVENT_ID}"
+VENUE_HTTP_CODE=$(echo "$VENUE_RESPONSE" | tail -1)
+VENUE_BODY=$(echo "$VENUE_RESPONSE" | sed '$d')
 
-# 3. Create tickets (A-001 ~ A-100)
-echo "[3/4] Creating ${TICKET_COUNT} tickets..."
-FAIL_COUNT=0
-for i in $(seq 1 "${TICKET_COUNT}"); do
-  SEAT_NUM=$(printf "A-%03d" "${i}")
-  HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/api/tickets" \
-    -H "Content-Type: application/json" \
-    -d "{
-      \"eventId\": ${EVENT_ID},
-      \"seatNumber\": \"${SEAT_NUM}\",
-      \"price\": ${PRICE}
-    }")
-
-  if [ "${HTTP_CODE}" != "201" ]; then
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-  fi
-
-  # Progress indicator every 10 tickets
-  if [ $((i % 10)) -eq 0 ]; then
-    echo "  Created ${i}/${TICKET_COUNT} tickets..."
-  fi
-done
-
-if [ "${FAIL_COUNT}" -gt 0 ]; then
-  echo "  WARNING: ${FAIL_COUNT}/${TICKET_COUNT} tickets failed to create"
-  if [ "${FAIL_COUNT}" -gt $((TICKET_COUNT / 5)) ]; then
-    echo "ERROR: Too many failures (>${TICKET_COUNT}/5). Aborting."
-    exit 1
-  fi
+if [ "$VENUE_HTTP_CODE" != "201" ]; then
+  echo "ERROR: Failed to create venue (HTTP $VENUE_HTTP_CODE)"
+  echo "$VENUE_BODY"
+  exit 1
 fi
 
-# 4. Wait for Kafka Streams to materialize seat states
-echo "[4/4] Waiting ${KAFKA_WAIT}s for Kafka Streams materialization..."
-sleep "${KAFKA_WAIT}"
+VENUE_ID=$(echo "$VENUE_BODY" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+echo "Venue created: id=$VENUE_ID"
 
-# Verify available tickets
-AVAILABLE=$(curl -sf "${BASE_URL}/api/tickets/available?eventId=${EVENT_ID}" | jq 'length')
+# 2. Build sections JSON
+SECTIONS="["
+for (( i=0; i<NUM_SECTIONS; i++ )); do
+  if [ "$i" -gt 0 ]; then SECTIONS+=","; fi
+  SECTIONS+="{\"section\":\"S${i}\",\"rows\":${ROWS},\"seatsPerRow\":${SEATS_PER_ROW}}"
+done
+SECTIONS+="]"
+
+# 3. Create event
+TOMORROW=$(date -v+1d +%Y-%m-%d 2>/dev/null || date -d "+1 day" +%Y-%m-%d)
+EVENT_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/events" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"name\": \"perf-event-$(date +%s)\",
+    \"description\": \"Performance test event\",
+    \"eventDate\": \"$TOMORROW\",
+    \"venueId\": $VENUE_ID,
+    \"sections\": $SECTIONS
+  }")
+
+EVENT_HTTP_CODE=$(echo "$EVENT_RESPONSE" | tail -1)
+EVENT_BODY=$(echo "$EVENT_RESPONSE" | sed '$d')
+
+if [ "$EVENT_HTTP_CODE" != "201" ]; then
+  echo "ERROR: Failed to create event (HTTP $EVENT_HTTP_CODE)"
+  echo "$EVENT_BODY"
+  exit 1
+fi
+
+EVENT_ID=$(echo "$EVENT_BODY" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+echo "Event created: id=$EVENT_ID"
+
+# 4. Wait for Kafka Streams to initialize
+echo "Waiting 3 seconds for Kafka Streams initialization..."
+sleep 3
+
 echo ""
 echo "=== Setup Complete ==="
-echo "  Event ID:         ${EVENT_ID}"
-echo "  Available tickets: ${AVAILABLE}/${TICKET_COUNT}"
+echo "  EVENT_ID=$EVENT_ID"
 echo ""
-echo "Run the load test with:"
-echo "  k6 run -e EVENT_ID=${EVENT_ID} scripts/load-test.js"
+echo "Run k6 tests:"
+echo "  k6 run -e HOST_PORT=${BASE_URL#http://} scripts/perf/k6/smoke.js"
+echo ""
+echo "Run Go spike test:"
+echo "  cd scripts/perf/go-client && go run . --host ${BASE_URL#http://} -n 1000 -a $NUM_SECTIONS"

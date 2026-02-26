@@ -1,38 +1,62 @@
-// Spike Test Client — 瞬間爆量壓測
-//
-// 用法:
-//   cd scripts/perf/go-client
-//   go run main.go -host http://localhost:8080 -n 100000 -c 4 -seats 100
-//
-// Flags:
-//   -host     Base URL (default: http://localhost:8080)
-//   -n        Number of concurrent reservations (default: 100000)
-//   -c        Number of HTTP client pool size (default: 4)
-//   -seats    Number of tickets to create (default: 100)
-//   -section  Section name (default: A)
-//   -seatCount Seats per reservation (default: 2)
-//   -sleep    Sleep between POST and GET in ms (default: 100)
-
 package main
 
 import (
 	"bytes"
+	"cmp"
+	"context"
+	"crypto/tls"
 	"encoding/json"
-	"flag"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math"
+	"math/rand"
+	"net"
 	"net/http"
 	"os"
-	"sort"
+	"runtime"
+	"runtime/pprof"
+	"runtime/trace"
+	"slices"
+	"strconv"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/hashicorp/go-retryablehttp"
+	"github.com/tcnksm/go-httpstat"
+	"github.com/urfave/cli/v3"
+	"go.uber.org/zap"
 	"golang.org/x/net/http2"
 )
 
-// --- Data Structures ---
+// ---------------------------------------------------------------------------
+// Logger adapter for retryablehttp
+// ---------------------------------------------------------------------------
 
+type SugaredLeveledLogger struct {
+	logger *zap.SugaredLogger
+}
+
+func (s SugaredLeveledLogger) Error(msg string, keysAndValues ...interface{}) {
+	s.logger.Errorw(msg, keysAndValues...)
+}
+func (s SugaredLeveledLogger) Info(msg string, keysAndValues ...interface{}) {
+	s.logger.Infow(msg, keysAndValues...)
+}
+func (s SugaredLeveledLogger) Debug(msg string, keysAndValues ...interface{}) {
+	s.logger.Debugw(msg, keysAndValues...)
+}
+func (s SugaredLeveledLogger) Warn(msg string, keysAndValues ...interface{}) {
+	s.logger.Warnw(msg, keysAndValues...)
+}
+
+// ---------------------------------------------------------------------------
+// Data types — adapted for /api/* endpoints
+// ---------------------------------------------------------------------------
+
+// POST /api/venues
 type VenueRequest struct {
 	Name     string `json:"name"`
 	Address  string `json:"address"`
@@ -40,26 +64,34 @@ type VenueRequest struct {
 }
 
 type VenueResponse struct {
-	ID int64 `json:"id"`
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Address  string `json:"address"`
+	Capacity int    `json:"capacity"`
+}
+
+// POST /api/events
+type SectionRequest struct {
+	Section     string `json:"section"`
+	Rows        int    `json:"rows"`
+	SeatsPerRow int    `json:"seatsPerRow"`
 }
 
 type EventRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	EventDate   string `json:"eventDate"`
-	VenueID     int64  `json:"venueId"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	EventDate   string           `json:"eventDate"`
+	VenueID     int64            `json:"venueId"`
+	Sections    []SectionRequest `json:"sections"`
 }
 
 type EventResponse struct {
-	ID int64 `json:"id"`
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	TotalSeats int    `json:"totalSeats"`
 }
 
-type TicketRequest struct {
-	EventID    int64  `json:"eventId"`
-	SeatNumber string `json:"seatNumber"`
-	Price      int    `json:"price"`
-}
-
+// POST /api/reservations
 type ReservationRequest struct {
 	EventID   int64  `json:"eventId"`
 	Section   string `json:"section"`
@@ -67,344 +99,642 @@ type ReservationRequest struct {
 	UserID    string `json:"userId"`
 }
 
-type ReservationPostResponse struct {
+// POST response: { "reservationId": "...", "status": "..." }
+type CreateReservationResponse struct {
 	ReservationID string `json:"reservationId"`
+	Status        string `json:"status"`
 }
 
-type ReservationGetResponse struct {
+// GET /api/reservations/{id}
+type ReservationResponse struct {
 	ReservationID  string   `json:"reservationId"`
 	EventID        int64    `json:"eventId"`
+	Section        string   `json:"section"`
+	SeatCount      int      `json:"seatCount"`
+	UserID         string   `json:"userId"`
 	Status         string   `json:"status"`
 	AllocatedSeats []string `json:"allocatedSeats"`
 }
 
-type Result struct {
-	Status         string
-	AllocatedSeats []string
-	PostDuration   time.Duration
-	GetDuration    time.Duration
-	Error          string
+// ---------------------------------------------------------------------------
+// Globals
+// ---------------------------------------------------------------------------
+
+var clients []*http.Client
+var logger *zap.SugaredLogger
+
+func getClient() *http.Client {
+	return clients[rand.Int()%len(clients)]
 }
 
-// --- HTTP Client Pool ---
+// ---------------------------------------------------------------------------
+// API helpers
+// ---------------------------------------------------------------------------
 
-type ClientPool struct {
-	clients []*http.Client
-	idx     int
-	mu      sync.Mutex
-}
-
-func NewClientPool(size int, useHTTP2 bool) *ClientPool {
-	pool := &ClientPool{clients: make([]*http.Client, size)}
-	for i := 0; i < size; i++ {
-		transport := &http.Transport{
-			MaxIdleConns:        10000,
-			MaxIdleConnsPerHost: 10000,
-			MaxConnsPerHost:     10000,
-			IdleConnTimeout:     90 * time.Second,
-		}
-		if useHTTP2 {
-			_ = http2.ConfigureTransport(transport)
-		}
-		pool.clients[i] = &http.Client{
-			Transport: transport,
-			Timeout:   60 * time.Second,
-		}
+func createVenue(host string, numOfSections int) (*VenueResponse, error) {
+	url := fmt.Sprintf("http://%s/api/venues", host)
+	venue := VenueRequest{
+		Name:     "spike-venue-" + uuid.NewString()[:8],
+		Address:  "Go Spike Test",
+		Capacity: numOfSections * 20 * 20,
 	}
-	return pool
-}
 
-func (p *ClientPool) Get() *http.Client {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	c := p.clients[p.idx%len(p.clients)]
-	p.idx++
-	return c
-}
-
-// --- Setup ---
-
-func setupTestData(host string, client *http.Client, numSeats int) int64 {
-	// Create venue
-	venueBody, _ := json.Marshal(VenueRequest{Name: "Spike Arena", Address: "Spike Blvd", Capacity: 50000})
-	resp, err := client.Post(host+"/api/venues", "application/json", bytes.NewReader(venueBody))
-	if err != nil || resp.StatusCode != 201 {
-		log.Fatalf("Failed to create venue: %v (status: %d)", err, resp.StatusCode)
+	jsonData, err := json.Marshal(venue)
+	if err != nil {
+		return nil, err
 	}
-	var venue VenueResponse
-	json.NewDecoder(resp.Body).Decode(&venue)
-	resp.Body.Close()
 
-	// Create event
-	eventBody, _ := json.Marshal(EventRequest{
-		Name:        fmt.Sprintf("SpikeTest-%d", time.Now().UnixMilli()),
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := getClient().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error sending request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("venue creation failed: %d %s", resp.StatusCode, string(body))
+	}
+
+	var created VenueResponse
+	if err := json.Unmarshal(body, &created); err != nil {
+		return nil, fmt.Errorf("error parsing venue response: %w", err)
+	}
+	return &created, nil
+}
+
+func createEvent(host string, venueID int64, numOfSections int) (*EventResponse, []string, error) {
+	url := fmt.Sprintf("http://%s/api/events", host)
+
+	tomorrow := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
+	sections := make([]SectionRequest, numOfSections)
+	sectionNames := make([]string, numOfSections)
+	for i := 0; i < numOfSections; i++ {
+		name := "S" + strconv.Itoa(i)
+		sections[i] = SectionRequest{Section: name, Rows: 20, SeatsPerRow: 20}
+		sectionNames[i] = name
+	}
+
+	event := EventRequest{
+		Name:        "spike-event-" + uuid.NewString()[:8],
 		Description: "Go spike test",
-		EventDate:   "2026-12-31",
-		VenueID:     venue.ID,
-	})
-	resp, err = client.Post(host+"/api/events", "application/json", bytes.NewReader(eventBody))
-	if err != nil || resp.StatusCode != 201 {
-		log.Fatalf("Failed to create event: %v", err)
+		EventDate:   tomorrow,
+		VenueID:     venueID,
+		Sections:    sections,
 	}
-	var event EventResponse
-	json.NewDecoder(resp.Body).Decode(&event)
-	resp.Body.Close()
 
-	// Create tickets concurrently
-	var wg sync.WaitGroup
-	created := 0
-	var mu sync.Mutex
-	sem := make(chan struct{}, 50) // concurrency limiter
-
-	for i := 1; i <= numSeats; i++ {
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(idx int) {
-			defer wg.Done()
-			defer func() { <-sem }()
-
-			seatNumber := fmt.Sprintf("A-%03d", idx)
-			body, _ := json.Marshal(TicketRequest{EventID: event.ID, SeatNumber: seatNumber, Price: 2800})
-			r, e := client.Post(host+"/api/tickets", "application/json", bytes.NewReader(body))
-			if e == nil && r.StatusCode == 201 {
-				mu.Lock()
-				created++
-				mu.Unlock()
-				r.Body.Close()
-			}
-		}(i)
+	jsonData, err := json.Marshal(event)
+	if err != nil {
+		return nil, nil, err
 	}
-	wg.Wait()
 
-	fmt.Printf("Setup: venue=%d, event=%d, tickets=%d/%d\n", venue.ID, event.ID, created, numSeats)
-	fmt.Println("Waiting 3s for Kafka Streams materialization...")
-	time.Sleep(3 * time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 
-	return event.ID
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, nil, fmt.Errorf("error creating request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := getClient().Do(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error sending request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error reading response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusCreated {
+		return nil, nil, fmt.Errorf("event creation failed: %d %s", resp.StatusCode, string(body))
+	}
+
+	var created EventResponse
+	if err := json.Unmarshal(body, &created); err != nil {
+		return nil, nil, fmt.Errorf("error parsing event response: %w", err)
+	}
+	return &created, sectionNames, nil
 }
 
-// --- Spike Test ---
+func createReservation(host string, eventID int64, section string) (string, *httpstat.Result, error) {
+	url := fmt.Sprintf("http://%s/api/reservations", host)
 
-func runSpikeTest(host string, pool *ClientPool, eventId int64, numRequests int, section string, seatCount int, sleepMs int) []Result {
-	results := make([]Result, numRequests)
-	var wg sync.WaitGroup
-
-	fmt.Printf("\nLaunching %d concurrent goroutines...\n", numRequests)
-	start := time.Now()
-
-	for i := 0; i < numRequests; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-
-			client := pool.Get()
-			userId := fmt.Sprintf("spike-%d", idx)
-
-			// POST reservation
-			reqBody, _ := json.Marshal(ReservationRequest{
-				EventID:   eventId,
-				Section:   section,
-				SeatCount: seatCount,
-				UserID:    userId,
-			})
-
-			postStart := time.Now()
-			resp, err := client.Post(host+"/api/reservations", "application/json", bytes.NewReader(reqBody))
-			postDuration := time.Since(postStart)
-
-			if err != nil {
-				results[idx] = Result{Status: "ERROR", Error: err.Error(), PostDuration: postDuration}
-				return
-			}
-
-			if resp.StatusCode != 202 {
-				resp.Body.Close()
-				results[idx] = Result{Status: "POST_FAILED", PostDuration: postDuration}
-				return
-			}
-
-			var postResp ReservationPostResponse
-			json.NewDecoder(resp.Body).Decode(&postResp)
-			resp.Body.Close()
-
-			// Short sleep before GET (let Kafka Streams process)
-			if sleepMs > 0 {
-				time.Sleep(time.Duration(sleepMs) * time.Millisecond)
-			}
-
-			// GET reservation (DeferredResult long-polling — server blocks until ready)
-			getStart := time.Now()
-			getResp, err := client.Get(host + "/api/reservations/" + postResp.ReservationID)
-			getDuration := time.Since(getStart)
-
-			if err != nil {
-				results[idx] = Result{Status: "GET_ERROR", Error: err.Error(), PostDuration: postDuration, GetDuration: getDuration}
-				return
-			}
-			defer getResp.Body.Close()
-
-			if getResp.StatusCode == 200 {
-				var reservation ReservationGetResponse
-				json.NewDecoder(getResp.Body).Decode(&reservation)
-				results[idx] = Result{
-					Status:         reservation.Status,
-					AllocatedSeats: reservation.AllocatedSeats,
-					PostDuration:   postDuration,
-					GetDuration:    getDuration,
-				}
-			} else {
-				results[idx] = Result{Status: "TIMEOUT", PostDuration: postDuration, GetDuration: getDuration}
-			}
-		}(i)
+	payload := ReservationRequest{
+		EventID:   eventID,
+		Section:   section,
+		SeatCount: rand.Intn(4) + 1,
+		UserID:    "spike-" + uuid.NewString()[:8],
 	}
 
-	wg.Wait()
-	elapsed := time.Since(start)
-	fmt.Printf("All %d requests completed in %.2fs\n", numRequests, elapsed.Seconds())
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return "", nil, fmt.Errorf("error marshaling JSON: %w", err)
+	}
 
-	return results
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var result httpstat.Result
+	ctx = httpstat.WithHTTPStat(ctx, &result)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", nil, fmt.Errorf("error creating request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := getClient().Do(req)
+	if err != nil {
+		return "", &result, fmt.Errorf("error sending request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", &result, fmt.Errorf("error reading response: %w", err)
+	}
+	result.End(time.Now())
+
+	if resp.StatusCode != http.StatusAccepted {
+		return "", &result, fmt.Errorf("POST reservation failed: %d %s", resp.StatusCode, string(body))
+	}
+
+	var createResp CreateReservationResponse
+	if err := json.Unmarshal(body, &createResp); err != nil {
+		return "", &result, fmt.Errorf("error parsing POST response: %w", err)
+	}
+	return createResp.ReservationID, &result, nil
 }
 
-// --- Report ---
+func getReservation(host string, reservationID string) (*ReservationResponse, *httpstat.Result, error) {
+	url := fmt.Sprintf("http://%s/api/reservations/%s", host, reservationID)
 
-func reportResults(results []Result, numSeats int) {
-	confirmed := 0
-	rejected := 0
-	timeouts := 0
-	errors := 0
-	var postDurations []float64
-	var getDurations []float64
-	var e2eDurations []float64
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 
-	// Seat duplicate detection
-	seatSet := make(map[string]bool)
-	duplicates := 0
+	var result httpstat.Result
+	ctx = httpstat.WithHTTPStat(ctx, &result)
 
-	for _, r := range results {
-		switch r.Status {
-		case "CONFIRMED":
-			confirmed++
-			for _, seat := range r.AllocatedSeats {
-				if seatSet[seat] {
-					duplicates++
-					fmt.Fprintf(os.Stderr, "DUPLICATE SEAT: %s\n", seat)
-				}
-				seatSet[seat] = true
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp, err := getClient().Do(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error sending request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, &result, fmt.Errorf("GET reservation %d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, &result, fmt.Errorf("error reading response: %w", err)
+	}
+	result.End(time.Now())
+
+	var reservation ReservationResponse
+	if err := json.Unmarshal(body, &reservation); err != nil {
+		return nil, &result, fmt.Errorf("error parsing reservation: %w", err)
+	}
+	return &reservation, &result, nil
+}
+
+// ---------------------------------------------------------------------------
+// Health check & HTTP client init
+// ---------------------------------------------------------------------------
+
+func healthCheck(client *http.Client, host string) error {
+	// Use actuator health endpoint (Spring Boot default)
+	url := fmt.Sprintf("http://%s/actuator/health", host)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("error sending request: %w", err)
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	return nil
+}
+
+func initHTTPClients(enableHTTP2 bool, numOfClients int, host string) {
+	for i := 0; i < numOfClients; i++ {
+		retryClient := retryablehttp.NewClient()
+		retryClient.RetryMax = 20
+		retryClient.Logger = SugaredLeveledLogger{logger: logger}
+
+		if enableHTTP2 {
+			httpClient := &http.Client{
+				Transport: &http2.Transport{
+					AllowHTTP: true,
+					DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+						return net.Dial(network, addr)
+					},
+				},
 			}
-		case "REJECTED":
-			rejected++
-		case "TIMEOUT":
-			timeouts++
-		default:
-			errors++
+			retryClient.HTTPClient = httpClient
 		}
 
-		if r.PostDuration > 0 {
-			postDurations = append(postDurations, float64(r.PostDuration.Milliseconds()))
+		client := retryClient.StandardClient()
+		err := healthCheck(client, host)
+		if err != nil {
+			logger.Warnf("health check to %s failed (continuing anyway): %v", host, err)
 		}
-		if r.GetDuration > 0 {
-			getDurations = append(getDurations, float64(r.GetDuration.Milliseconds()))
+
+		clients = append(clients, client)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Concurrent test runner
+// ---------------------------------------------------------------------------
+
+type Result struct {
+	reservation *ReservationResponse
+	err         error
+	postStats   *httpstat.Result
+	getStats    *httpstat.Result
+	latency     time.Duration
+}
+
+func createConcurrentRequests(host string, eventID int64, sections []string, numOfRequests int, resultChan chan<- Result, timeOfSleep time.Duration) {
+	var wg sync.WaitGroup
+
+	testStartTime := time.Now()
+	for i := 0; i < numOfRequests; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			section := sections[rand.Intn(len(sections))]
+			startTime := time.Now()
+
+			reservationID, postStats, err := createReservation(host, eventID, section)
+			if err != nil {
+				resultChan <- Result{err: err, postStats: postStats, latency: time.Since(startTime)}
+				return
+			}
+
+			time.Sleep(timeOfSleep)
+
+			reservation, getStats, err := getReservation(host, reservationID)
+			if err != nil {
+				resultChan <- Result{err: err, postStats: postStats, getStats: getStats, latency: time.Since(startTime)}
+				return
+			}
+
+			resultChan <- Result{
+				reservation: reservation,
+				postStats:   postStats,
+				getStats:    getStats,
+				latency:     time.Since(startTime),
+			}
+		}()
+	}
+	wg.Wait()
+	logger.Infof("Test completed in %.2f seconds", time.Since(testStartTime).Seconds())
+}
+
+// ---------------------------------------------------------------------------
+// Results reporting with duplicate seat detection
+// ---------------------------------------------------------------------------
+
+func reportResults(numOfRequests int, resultChan <-chan Result) {
+	// section -> set of allocated seat strings
+	reservedSeats := make(map[string]map[string]bool)
+	successReservations := 0
+	failedReservations := 0
+	errResults := 0
+	duplicateSeats := 0
+
+	var reservationStats []Result
+	var reservationLatency []time.Duration
+
+	for i := 0; i < numOfRequests; i++ {
+		result := <-resultChan
+		if result.err != nil {
+			errResults++
+			logger.Error(result.err)
+			continue
 		}
-		if r.PostDuration > 0 && r.GetDuration > 0 {
-			e2eDurations = append(e2eDurations, float64((r.PostDuration + r.GetDuration).Milliseconds()))
+		reservationStats = append(reservationStats, result)
+		reservationLatency = append(reservationLatency, result.latency)
+
+		reservation := result.reservation
+		section := reservation.Section
+
+		if reservedSeats[section] == nil {
+			reservedSeats[section] = make(map[string]bool)
+		}
+
+		if reservation.Status == "CONFIRMED" {
+			successReservations++
+			for _, seat := range reservation.AllocatedSeats {
+				key := section + ":" + seat
+				if reservedSeats[section][key] {
+					duplicateSeats++
+					logger.Errorf("DUPLICATE SEAT DETECTED: section=%s seat=%s", section, seat)
+				}
+				reservedSeats[section][key] = true
+			}
+		} else {
+			failedReservations++
 		}
 	}
 
-	total := confirmed + rejected + timeouts + errors
-	expectedConfirmed := numSeats / 2
+	fmt.Println("\n========== SPIKE TEST RESULTS ==========")
+	reportResponseTimeStats(reservationStats, reservationLatency)
+	fmt.Printf("Successful reservations: %d\n", successReservations)
+	fmt.Printf("Failed reservations:     %d\n", failedReservations)
+	fmt.Printf("Error results:           %d\n", errResults)
+	fmt.Printf("Duplicate seats:         %d\n", duplicateSeats)
 
-	fmt.Println("\n=== Spike Test Results ===")
-	fmt.Printf("  Reservations:\n")
-	fmt.Printf("    CONFIRMED: %d (expected: %d)\n", confirmed, expectedConfirmed)
-	fmt.Printf("    REJECTED:  %d\n", rejected)
-	fmt.Printf("    TIMEOUT:   %d\n", timeouts)
-	fmt.Printf("    ERRORS:    %d\n", errors)
-	fmt.Printf("    Total:     %d\n", total)
-	fmt.Println()
-
-	fmt.Printf("  POST latency:\n")
-	printPercentiles(postDurations)
-	fmt.Printf("  GET latency (long-polling):\n")
-	printPercentiles(getDurations)
-	fmt.Printf("  E2E latency (POST + GET):\n")
-	printPercentiles(e2eDurations)
-
-	fmt.Printf("\n  Seats allocated: %d / %d\n", len(seatSet), numSeats)
-	fmt.Printf("  Duplicate seats: %d", duplicates)
-	if duplicates == 0 {
-		fmt.Println(" (PASS)")
+	if duplicateSeats > 0 {
+		fmt.Println("\n*** OVERBOOKING DETECTED — DATA INTEGRITY VIOLATION ***")
 	} else {
-		fmt.Println(" (FAIL)")
+		fmt.Println("\nZero duplicate seats — data integrity verified.")
 	}
-	fmt.Println("==========================")
 
-	if duplicates > 0 {
-		log.Fatalf("FATAL: %d duplicate seats detected!", duplicates)
+	totalReservedSeats := 0
+	for section, seats := range reservedSeats {
+		fmt.Printf("  Section %-5s: %d seats reserved\n", section, len(seats))
+		totalReservedSeats += len(seats)
 	}
+	fmt.Printf("Total reserved seats: %d\n", totalReservedSeats)
+	fmt.Println("=========================================")
 }
 
-func printPercentiles(durations []float64) {
-	if len(durations) == 0 {
-		fmt.Println("    No data")
+func reportResponseTimeStats(reservationStats []Result, reservationLatency []time.Duration) {
+	if len(reservationStats) == 0 {
+		fmt.Println("No successful responses to report.")
 		return
 	}
-	sort.Float64s(durations)
-	fmt.Printf("    P50: %.1fms  P95: %.1fms  P99: %.1fms  Max: %.1fms\n",
-		percentile(durations, 50),
-		percentile(durations, 95),
-		percentile(durations, 99),
-		durations[len(durations)-1],
-	)
+
+	slices.SortFunc(reservationStats, func(r1, r2 Result) int {
+		return cmp.Compare(getResponseTime(r1), getResponseTime(r2))
+	})
+	slices.SortFunc(reservationLatency, func(t1, t2 time.Duration) int {
+		return cmp.Compare(t1.Milliseconds(), t2.Milliseconds())
+	})
+
+	fmt.Println(getPercentileResult(reservationStats, reservationLatency, 50))
+	fmt.Println(getPercentileResult(reservationStats, reservationLatency, 95))
+	fmt.Println(getPercentileResult(reservationStats, reservationLatency, 99))
 }
 
-func percentile(sorted []float64, p float64) float64 {
-	if len(sorted) == 0 {
-		return 0
+func getResponseTime(result Result) int64 {
+	var t time.Duration
+	if result.postStats != nil {
+		t += result.postStats.ServerProcessing
 	}
-	rank := (p / 100) * float64(len(sorted)-1)
-	lower := int(math.Floor(rank))
-	upper := int(math.Ceil(rank))
-	if lower == upper {
-		return sorted[lower]
+	if result.getStats != nil {
+		t += result.getStats.ServerProcessing
 	}
-	frac := rank - float64(lower)
-	return sorted[lower]*(1-frac) + sorted[upper]*frac
+	return t.Milliseconds()
 }
 
-// --- Main ---
+func getPercentileResult(reservationStats []Result, reservationLatency []time.Duration, percentileInt int) string {
+	if len(reservationStats) == 0 {
+		return "No data for percentile calculation"
+	}
+
+	percentile := float64(percentileInt) / 100.0
+	n := len(reservationStats)
+	idx := float64(n-1) * percentile
+
+	lowIdx := int(math.Floor(idx))
+	highIdx := int(math.Ceil(idx))
+
+	if lowIdx == highIdx {
+		pt := float64(getResponseTime(reservationStats[lowIdx]))
+		lat := float64(reservationLatency[lowIdx].Milliseconds())
+		return fmt.Sprintf("P%d: Processing Time %.1f ms, Latency %.1f ms", percentileInt, pt, lat)
+	}
+
+	pt1 := float64(getResponseTime(reservationStats[lowIdx]))
+	pt2 := float64(getResponseTime(reservationStats[highIdx]))
+	lat1 := float64(reservationLatency[lowIdx].Milliseconds())
+	lat2 := float64(reservationLatency[highIdx].Milliseconds())
+
+	pt := pt1*(float64(highIdx)-idx) + pt2*(idx-float64(lowIdx))
+	lat := lat1*(float64(highIdx)-idx) + lat2*(idx-float64(lowIdx))
+
+	return fmt.Sprintf("P%d: Processing Time %.1f ms, Latency %.1f ms", percentileInt, pt, lat)
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
 
 func main() {
-	host := flag.String("host", "http://localhost:8080", "Base URL")
-	numRequests := flag.Int("n", 100000, "Number of concurrent reservations")
-	poolSize := flag.Int("c", 4, "HTTP client pool size")
-	numSeats := flag.Int("seats", 100, "Number of tickets to create")
-	section := flag.String("section", "A", "Section name")
-	seatCount := flag.Int("seatCount", 2, "Seats per reservation")
-	sleepMs := flag.Int("sleep", 100, "Sleep between POST and GET (ms)")
-	skipSetup := flag.Bool("skip-setup", false, "Skip test data setup (use existing event)")
-	eventId := flag.Int64("event-id", 0, "Event ID (only with -skip-setup)")
-	flag.Parse()
+	cmd := &cli.Command{
+		Name:                   "spike-test",
+		Usage:                  "TicketMaster spike/burst load test client",
+		UseShortOptionHandling: true,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "host",
+				Value: "localhost:8080",
+				Usage: "target host:port",
+			},
+			&cli.IntFlag{
+				Name:    "reqs",
+				Value:   20,
+				Usage:   "number of concurrent requests",
+				Aliases: []string{"n"},
+			},
+			&cli.IntFlag{
+				Name:    "numOfSections",
+				Value:   20,
+				Usage:   "number of sections to create",
+				Aliases: []string{"a"},
+			},
+			&cli.IntFlag{
+				Name:    "numOfClients",
+				Value:   1,
+				Usage:   "number of HTTP clients (reduces lock contention)",
+				Aliases: []string{"c"},
+			},
+			&cli.StringFlag{
+				Name:    "sleep",
+				Value:   "0s",
+				Usage:   "sleep between POST and GET",
+				Aliases: []string{"t"},
+				Action: func(ctx context.Context, cmd *cli.Command, v string) error {
+					_, err := time.ParseDuration(v)
+					return err
+				},
+			},
+			&cli.StringFlag{
+				Name:    "env",
+				Value:   "dev",
+				Usage:   "environment (dev|prod)",
+				Aliases: []string{"e"},
+				Action: func(ctx context.Context, cmd *cli.Command, v string) error {
+					if v != "dev" && v != "prod" {
+						return errors.New(fmt.Sprintf("env should be 'dev' or 'prod', got %s", v))
+					}
+					return nil
+				},
+			},
+			&cli.BoolFlag{
+				Name:  "http2",
+				Value: false,
+				Usage: "enable HTTP/2 cleartext (h2c)",
+			},
+			&cli.StringFlag{Name: "cpuprofile", Aliases: []string{"cpu"}, Usage: "write CPU profile to file"},
+			&cli.StringFlag{Name: "memprofile", Aliases: []string{"mem"}, Usage: "write memory profile to file"},
+			&cli.StringFlag{Name: "blockprofile", Aliases: []string{"block"}, Usage: "write block profile to file"},
+			&cli.StringFlag{Name: "lockprofile", Aliases: []string{"lock"}, Usage: "write lock profile to file"},
+			&cli.StringFlag{Name: "traceprofile", Aliases: []string{"trace"}, Usage: "write trace to file"},
+		},
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			host := cmd.String("host")
+			numOfRequests := int(cmd.Int("reqs"))
+			enableHTTP2 := cmd.Bool("http2")
+			timeOfSleep, _ := time.ParseDuration(cmd.String("sleep"))
+			numOfSections := int(cmd.Int("numOfSections"))
+			numOfClients := int(cmd.Int("numOfClients"))
+			env := cmd.String("env")
+			cpuprofile := cmd.String("cpuprofile")
+			memprofile := cmd.String("memprofile")
+			blockprofile := cmd.String("blockprofile")
+			lockprofile := cmd.String("lockprofile")
+			traceprofile := cmd.String("traceprofile")
 
-	fmt.Println("=== Spike Test Client ===")
-	fmt.Printf("  Host:       %s\n", *host)
-	fmt.Printf("  Requests:   %d\n", *numRequests)
-	fmt.Printf("  Pool size:  %d\n", *poolSize)
-	fmt.Printf("  Seats:      %d\n", *numSeats)
-	fmt.Printf("  Section:    %s\n", *section)
-	fmt.Printf("  Seat/req:   %d\n", *seatCount)
-	fmt.Printf("  Sleep:      %dms\n", *sleepMs)
-	fmt.Println()
+			// Profiling setup
+			if blockprofile != "" {
+				runtime.SetBlockProfileRate(1)
+			}
+			if lockprofile != "" {
+				runtime.SetMutexProfileFraction(1)
+			}
+			if cpuprofile != "" {
+				f, err := os.Create(cpuprofile)
+				if err != nil {
+					log.Fatal("could not create CPU profile: ", err)
+				}
+				defer f.Close()
+				if err := pprof.StartCPUProfile(f); err != nil {
+					log.Fatal("could not start CPU profile: ", err)
+				}
+				defer pprof.StopCPUProfile()
+			}
+			if traceprofile != "" {
+				f, err := os.Create(traceprofile)
+				if err != nil {
+					log.Fatal("could not create trace profile: ", err)
+				}
+				defer f.Close()
+				if err := trace.Start(f); err != nil {
+					log.Fatalf("could not start trace: %v", err)
+				}
+				defer trace.Stop()
+			}
 
-	pool := NewClientPool(*poolSize, true)
+			// Logger
+			var zapLogger *zap.Logger
+			if env == "dev" {
+				zapLogger, _ = zap.NewDevelopment()
+			} else {
+				zapLogger, _ = zap.NewProduction()
+			}
+			defer zapLogger.Sync()
+			logger = zapLogger.Sugar()
 
-	var eid int64
-	if *skipSetup && *eventId > 0 {
-		eid = *eventId
-		fmt.Printf("Using existing event: %d\n", eid)
-	} else {
-		eid = setupTestData(*host, pool.Get(), *numSeats)
+			// Init HTTP clients
+			initHTTPClients(enableHTTP2, numOfClients, host)
+			resultChan := make(chan Result, numOfRequests)
+
+			// Create venue
+			logger.Infof("Creating venue with capacity for %d sections...", numOfSections)
+			venue, err := createVenue(host, numOfSections)
+			if err != nil {
+				log.Fatal(err)
+			}
+			logger.Infof("Venue created: id=%d", venue.ID)
+
+			// Create event with sections
+			logger.Infof("Creating event with %d sections (20x20 each)...", numOfSections)
+			event, sectionNames, err := createEvent(host, venue.ID, numOfSections)
+			if err != nil {
+				log.Fatal(err)
+			}
+			logger.Infof("Event created: id=%d, totalSeats=%d", event.ID, event.TotalSeats)
+
+			// Wait for Kafka Streams initialization
+			logger.Infof("Waiting 3 seconds for Kafka Streams to initialize...")
+			time.Sleep(3 * time.Second)
+			logger.Infoln("Ready — starting spike test")
+
+			// Run concurrent requests
+			createConcurrentRequests(host, event.ID, sectionNames, numOfRequests, resultChan, timeOfSleep)
+			reportResults(numOfRequests, resultChan)
+
+			// Write profiles
+			if memprofile != "" {
+				f, err := os.Create(memprofile)
+				if err != nil {
+					log.Fatal("could not create memory profile: ", err)
+				}
+				defer f.Close()
+				runtime.GC()
+				if err := pprof.Lookup("allocs").WriteTo(f, 0); err != nil {
+					log.Fatal("could not write memory profile: ", err)
+				}
+			}
+			if blockprofile != "" {
+				f, err := os.Create(blockprofile)
+				if err != nil {
+					log.Fatal("could not create block profile: ", err)
+				}
+				defer f.Close()
+				runtime.GC()
+				if err := pprof.Lookup("block").WriteTo(f, 0); err != nil {
+					log.Fatal("could not write block profile: ", err)
+				}
+			}
+			if lockprofile != "" {
+				f, err := os.Create(lockprofile)
+				if err != nil {
+					log.Fatal("could not create lock profile: ", err)
+				}
+				defer f.Close()
+				runtime.GC()
+				if err := pprof.Lookup("mutex").WriteTo(f, 0); err != nil {
+					log.Fatal("could not write lock profile: ", err)
+				}
+			}
+			return nil
+		},
 	}
 
-	results := runSpikeTest(*host, pool, eid, *numRequests, *section, *seatCount, *sleepMs)
-	reportResults(results, *numSeats)
+	if err := cmd.Run(context.Background(), os.Args); err != nil {
+		log.Fatal(err)
+	}
 }

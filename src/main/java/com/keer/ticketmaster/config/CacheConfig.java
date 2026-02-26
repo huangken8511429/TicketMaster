@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.serializer.*;
 
 import java.time.Duration;
 
@@ -18,9 +19,12 @@ public class CacheConfig {
 
     @Bean
     public CacheManager cacheManager(RedisConnectionFactory connectionFactory) {
-        // Configure Redis cache with 30s TTL for available tickets
         RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(Duration.ofSeconds(30))  // 30s TTL for ticket cache
+                .serializeValuesWith(
+                        RedisSerializationContext.SerializationPair
+                                .fromSerializer(new JacksonJsonRedisSerializer<>(Object.class))
+                )
+                .entryTtl(Duration.ofSeconds(30))
                 .disableCachingNullValues();
 
         return RedisCacheManager.builder(connectionFactory)
