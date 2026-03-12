@@ -21,10 +21,10 @@ import org.springframework.web.client.RestClient;
 import java.time.Instant;
 
 @Service
-@Profile({"reservation-processor", "default"})
+@Profile({"api", "default"})
 @RequiredArgsConstructor
 @Slf4j
-public class InteractiveQueryService implements ReservationQueryService {
+public class InteractiveQueryService {
 
     private final StreamsBuilderFactoryBean streamsBuilderFactoryBean;
     private final RestClient restClient;
@@ -32,7 +32,29 @@ public class InteractiveQueryService implements ReservationQueryService {
     @Value("${spring.kafka.streams.properties[application.server]}")
     private String applicationServer;
 
-    @Override
+    public HostInfo getKeyOwner(String reservationId) {
+        KafkaStreams kafkaStreams = streamsBuilderFactoryBean.getKafkaStreams();
+        if (kafkaStreams == null || kafkaStreams.state() != KafkaStreams.State.RUNNING) {
+            return null;
+        }
+
+        KeyQueryMetadata metadata = kafkaStreams.queryMetadataForKey(
+                KafkaConstants.RESERVATION_QUERY_STORE,
+                reservationId,
+                Serdes.String().serializer()
+        );
+
+        if (metadata == null || metadata.equals(KeyQueryMetadata.NOT_AVAILABLE)) {
+            return null;
+        }
+
+        return metadata.activeHost();
+    }
+
+    public boolean isLocal(HostInfo hostInfo) {
+        return isLocalHost(hostInfo);
+    }
+
     public ReservationResponse queryReservation(String reservationId) {
         KafkaStreams kafkaStreams = streamsBuilderFactoryBean.getKafkaStreams();
         if (kafkaStreams == null || kafkaStreams.state() != KafkaStreams.State.RUNNING) {

@@ -64,6 +64,7 @@ dependencies {
     testImplementation 'io.cucumber:cucumber-spring:7.14.0'
     testImplementation 'com.fasterxml.jackson.core:jackson-databind'
     testImplementation 'org.springframework.kafka:spring-kafka-test'
+    testImplementation 'org.apache.kafka:kafka-streams-test-utils'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testImplementation 'org.junit.platform:junit-platform-suite'
 }

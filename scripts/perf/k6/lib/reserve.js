@@ -43,7 +43,7 @@ export function reserveSeats(eventId, sections, reservationTime, reservationCoun
     if (getOk) {
       const reservation = getRes.json();
       check(reservation, {
-        'reservation resolved': (r) => r.status === 'CONFIRMED' || r.status === 'FAILED',
+        'reservation resolved': (r) => r.status === 'CONFIRMED' || r.status === 'REJECTED',
       });
 
       const totalDuration = postRes.timings.duration + getRes.timings.duration;
