@@ -25,7 +25,7 @@ import java.util.UUID;
 @Slf4j
 public class ReservationService {
 
-    private static final long ASYNC_TIMEOUT_MS = 30_000;
+    private static final long ASYNC_TIMEOUT_MS = 10_000;
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final InteractiveQueryService interactiveQueryService;

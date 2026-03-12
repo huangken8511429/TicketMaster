@@ -20,7 +20,7 @@ public class InternalReservationController {
     @GetMapping("/internal/reservations/{reservationId}")
     public DeferredResult<ResponseEntity<ReservationResponse>> getReservationInternal(
             @PathVariable String reservationId) {
-        DeferredResult<ResponseEntity<ReservationResponse>> deferred = new DeferredResult<>(30_000L);
+        DeferredResult<ResponseEntity<ReservationResponse>> deferred = new DeferredResult<>(10_000L);
         reservationService.waitLocally(reservationId, deferred);
         return deferred;
     }

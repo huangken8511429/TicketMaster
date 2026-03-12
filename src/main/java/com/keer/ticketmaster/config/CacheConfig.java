@@ -14,7 +14,7 @@ import java.time.Duration;
 
 @Configuration
 @EnableCaching
-@Profile({"api", "default"})
+@Profile("api")
 public class CacheConfig {
 
     @Bean

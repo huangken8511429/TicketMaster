@@ -1,8 +1,8 @@
-package com.keer.ticketmaster.ticket.stream;
+package com.keer.ticketmaster.reservation.stream;
 
 import com.keer.ticketmaster.avro.SectionSeatState;
+import com.keer.ticketmaster.avro.ReservationCommand;
 import com.keer.ticketmaster.avro.ReservationCompletedEvent;
-import com.keer.ticketmaster.avro.ReservationRequestedEvent;
 import com.keer.ticketmaster.config.KafkaConstants;
 import org.apache.kafka.streams.processor.api.Processor;
 import org.apache.kafka.streams.processor.api.ProcessorContext;
@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 public class SeatAllocationProcessor
-        implements Processor<String, ReservationRequestedEvent, String, ReservationCompletedEvent> {
+        implements Processor<String, ReservationCommand, String, ReservationCompletedEvent> {
 
     private ProcessorContext<String, ReservationCompletedEvent> context;
     private KeyValueStore<String, SectionSeatState> seatStore;
@@ -28,13 +28,13 @@ public class SeatAllocationProcessor
     }
 
     @Override
-    public void process(Record<String, ReservationRequestedEvent> record) {
-        ReservationRequestedEvent request = record.value();
-        String reservationId = request.getReservationId();
-        long eventId = request.getEventId();
-        String section = request.getSection();
-        int seatCount = request.getSeatCount();
-        String userId = request.getUserId();
+    public void process(Record<String, ReservationCommand> record) {
+        ReservationCommand command = record.value();
+        String reservationId = command.getReservationId();
+        long eventId = command.getEventId();
+        String section = command.getSection();
+        int seatCount = command.getSeatCount();
+        String userId = command.getUserId();
 
         String storeKey = eventId + "-" + section;
         SectionSeatState sectionState = seatStore.get(storeKey);

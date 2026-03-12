@@ -1,8 +1,7 @@
-package com.keer.ticketmaster.ticket.stream;
+package com.keer.ticketmaster.reservation.stream;
 
 import com.keer.ticketmaster.avro.SectionInitCommand;
 import com.keer.ticketmaster.avro.SectionSeatState;
-import com.keer.ticketmaster.avro.SectionStatusEvent;
 import com.keer.ticketmaster.config.KafkaConstants;
 import org.apache.kafka.streams.processor.api.Processor;
 import org.apache.kafka.streams.processor.api.ProcessorContext;
@@ -37,7 +36,6 @@ public class SectionInitProcessor
         Set<String> reserved = new HashSet<>(command.getInitialReserved());
 
         Map<String, String> seatStatuses = new HashMap<>();
-        int totalSeats = rows * seatsPerRow;
         int availableCount = 0;
         int globalIndex = 1;
 

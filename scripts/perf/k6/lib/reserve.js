@@ -34,7 +34,7 @@ export function reserveSeats(eventId, sections, reservationTime, reservationCoun
     // 2. GET reservation result (DeferredResult long-poll, up to 30s)
     const getRes = http.get(`${BASE_URL}/api/reservations/${reservationId}`, {
       ...HEADERS,
-      timeout: '35s',
+      timeout: '15s',
     });
     const getOk = check(getRes, {
       'GET status is 200': (r) => r.status === 200,
