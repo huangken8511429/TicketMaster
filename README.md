@@ -39,34 +39,41 @@ The system adopts a **Dataflow Architecture**, separating concerns into three ru
                                      │ Kafka produce
                                      ▼
                      ┌───────────────────────────────┐
-                     │        Kafka Cluster           │
+                     │     Kafka Cluster (32 分區)     │
                      │                                │
                      │  reservation-commands           │
-                     │  reservation-requests           │
                      │  reservation-completed          │
                      │  section-init / section-status  │
-                     └──────┬────────────────┬────────┘
-                            │                │
-                            ▼                ▼
-               ┌────────────────┐  ┌─────────────────┐
-               │  Reservation   │  │  Seat            │
-               │  Processor     │  │  Processor       │
-               │  (Kafka        │  │  (Kafka          │
-               │   Streams)     │  │   Streams)       │
-               └────────┬───────┘  └────────┬─────────┘
-                        │                   │
-                        ▼                   ▼
-                   ┌──────────┐       ┌──────────┐
-                   │PostgreSQL│       │  Redis    │
-                   │          │       │  (Cache)  │
-                   └──────────┘       └──────────┘
+                     └──────────────┬─────────────────┘
+                                    │
+                                    ▼
+                        ┌───────────────────────┐
+                        │  Event Processor       │
+                        │  (Kafka Streams)       │
+                        │                        │
+                        │  • SeatAllocation       │
+                        │  • SectionInit          │
+                        │  • SectionStatusEmitter │
+                        └─────┬───────────┬──────┘
+                              │           │
+                              ▼           ▼
+                        ┌──────────┐ ┌──────────┐
+                        │PostgreSQL│ │  Redis    │
+                        │          │ │  (Cache)  │
+                        └──────────┘ └──────────┘
 ```
 
 ### Data Flow
 
-1. **reservation-commands** → `ReservationCommandProcessor` → **reservation-requests**
-2. **reservation-requests** → `SeatAllocationProcessor` → **reservation-completed**
-3. **section-init** → `SectionInitProcessor` → **section-status**
+1. **section-init** → `SectionInitProcessor` → 初始化座位庫存至 State Store → **section-status**
+2. **reservation-commands** → `SeatAllocationProcessor` → 從 State Store 扣位 → **reservation-completed**
+3. 每次分配後 `SectionStatusEmitter` 發出最新剩餘數量 → **section-status**
+
+### Horizontal Scaling
+
+- 所有 topic 預設 **32 分區**（可透過 `ticketmaster.kafka.partitions` 調整），支援多 pod 平行消費
+- API Service 透過 Kafka Streams **Interactive Queries** 偵測 partition owner，將 long-poll 請求 forward 到正確的 pod，避免 DeferredResult 註冊在錯誤的節點上
+- `event-processor` profile 可獨立部署，與 API Service 分離擴展
 
 ### Why Dataflow?
 
@@ -97,6 +104,7 @@ The dataflow approach uses Kafka's partitioning to serialize writes per section,
 | **JUnit 5** | Unit and integration testing |
 | **Spring MockMvc** | API testing |
 | **Spring REST Docs** | Auto-generated API documentation from tests |
+| **TopologyTestDriver** | Kafka Streams topology unit tests (no broker required) |
 | **BDD Workflow** | Behavior-Driven Development with Given/When/Then steps |
 
 ### Observability
