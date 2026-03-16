@@ -1,7 +1,6 @@
 package com.keer.ticketmaster.reservation.service;
 
 import com.keer.ticketmaster.avro.ReservationCommand;
-import com.keer.ticketmaster.avro.ReservationCompletedEvent;
 import com.keer.ticketmaster.config.KafkaConstants;
 import com.keer.ticketmaster.reservation.dto.ReservationRequest;
 import com.keer.ticketmaster.reservation.dto.ReservationResponse;
@@ -16,7 +15,6 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.context.request.async.DeferredResult;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -30,32 +28,12 @@ public class ReservationService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final InteractiveQueryService interactiveQueryService;
     private final ReservationPendingRequests pendingRequests;
-    private final SeatAvailabilityChecker availableSeatCache;
     private final RestClient restClient;
 
     public record CreateResult(String reservationId, String status) {}
 
     public CreateResult createReservation(ReservationRequest request) {
         String reservationId = UUID.randomUUID().toString();
-
-        // Pre-filter: reject immediately if cache says not enough seats
-        if (!availableSeatCache.hasEnoughSeats(request.getEventId(), request.getSection(), request.getSeatCount())) {
-            ReservationCompletedEvent rejectedEvent = ReservationCompletedEvent.newBuilder()
-                    .setReservationId(reservationId)
-                    .setEventId(request.getEventId())
-                    .setSection(request.getSection())
-                    .setSeatCount(request.getSeatCount())
-                    .setUserId(request.getUserId())
-                    .setStatus("REJECTED")
-                    .setAllocatedSeats(List.of())
-                    .setTimestamp(Instant.now().toEpochMilli())
-                    .build();
-
-            kafkaTemplate.send(KafkaConstants.TOPIC_RESERVATION_COMPLETED,
-                    reservationId, rejectedEvent);
-
-            return new CreateResult(reservationId, "REJECTED");
-        }
 
         ReservationCommand command = ReservationCommand.newBuilder()
                 .setReservationId(reservationId)
@@ -66,8 +44,8 @@ public class ReservationService {
                 .setTimestamp(Instant.now().toEpochMilli())
                 .build();
 
-        String seatKey = request.getEventId() + "-" + request.getSection();
-        kafkaTemplate.send(KafkaConstants.TOPIC_RESERVATION_COMMANDS, seatKey, command);
+        // Key = reservationId; Reservation Processor handles pre-filter and re-key
+        kafkaTemplate.send(KafkaConstants.TOPIC_RESERVATION_COMMANDS, reservationId, command);
 
         return new CreateResult(reservationId, null);
     }
@@ -88,9 +66,6 @@ public class ReservationService {
         return deferred;
     }
 
-    /**
-     * Local async wait: register DeferredResult on this pod where KTable foreach will fire.
-     */
     public void waitLocally(String reservationId, DeferredResult<ResponseEntity<ReservationResponse>> deferred) {
         ReservationResponse response = queryLocalStore(reservationId);
         if (response != null) {
@@ -107,10 +82,6 @@ public class ReservationService {
         }
     }
 
-    /**
-     * Forward long-poll to the pod that owns this partition.
-     * That pod will register in its local pendingRequests and wait for KTable foreach.
-     */
     private void forwardToOwner(HostInfo owner, String reservationId,
                                 DeferredResult<ResponseEntity<ReservationResponse>> deferred) {
         String url = "http://%s:%d/internal/reservations/%s".formatted(

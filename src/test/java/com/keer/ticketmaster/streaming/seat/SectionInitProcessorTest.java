@@ -1,4 +1,4 @@
-package com.keer.ticketmaster.reservation.stream;
+package com.keer.ticketmaster.streaming.seat;
 
 import com.keer.ticketmaster.avro.SectionSeatState;
 import com.keer.ticketmaster.avro.SectionStatusEvent;
@@ -17,7 +17,6 @@ class SectionInitProcessorTest extends StreamProcessorTestBase {
     void normalInit_shouldCreateAllSeatsAvailable() {
         initSection(1L, "A", 2, 3);
 
-        // Verify state store
         KeyValueStore<String, SectionSeatState> store = getSeatInventoryStore();
         SectionSeatState state = store.get("1-A");
 
@@ -32,7 +31,6 @@ class SectionInitProcessorTest extends StreamProcessorTestBase {
             assertEquals("AVAILABLE", seats.get("A-" + i));
         }
 
-        // Verify output topic (section-status)
         assertFalse(sectionStatusOutput.isEmpty());
         KeyValue<String, SectionStatusEvent> output = sectionStatusOutput.readKeyValue();
         assertEquals("1-A", output.key);
@@ -59,10 +57,8 @@ class SectionInitProcessorTest extends StreamProcessorTestBase {
     @Test
     void duplicateInit_shouldOverwriteState() {
         initSection(1L, "A", 2, 3, List.of("A-1"));
-        // Drain output from first init
         sectionStatusOutput.readKeyValue();
 
-        // Re-init with different config
         initSection(1L, "A", 1, 2);
 
         SectionSeatState state = getSeatInventoryStore().get("1-A");

@@ -34,4 +34,14 @@ public class KafkaTopicConfig {
     public NewTopic reservationCompletedTopic() {
         return TopicBuilder.name(KafkaConstants.TOPIC_RESERVATION_COMPLETED).partitions(partitions).replicas(replicas).build();
     }
+
+    @Bean
+    public NewTopic seatAllocationRequestsTopic() {
+        return TopicBuilder.name(KafkaConstants.TOPIC_SEAT_ALLOCATION_REQUESTS).partitions(partitions).replicas(replicas).build();
+    }
+
+    @Bean
+    public NewTopic seatAllocationResultsTopic() {
+        return TopicBuilder.name(KafkaConstants.TOPIC_SEAT_ALLOCATION_RESULTS).partitions(partitions).replicas(replicas).build();
+    }
 }

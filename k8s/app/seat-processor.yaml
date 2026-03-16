@@ -4,7 +4,8 @@ metadata:
   name: seat-processor
   namespace: ticketmaster
 spec:
-  replicas: 10
+  # 16 replicas × 2 threads = 32 = partitions (1:1)
+  replicas: 16
   selector:
     matchLabels:
       app: seat-processor
@@ -20,6 +21,8 @@ spec:
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: seat-processor
+            - name: SPRING_KAFKA_STREAMS_PROPERTIES_NUM_STREAM_THREADS
+              value: "2"
             # Kafka Streams + RocksDB: needs more heap and CPU
             - name: JAVA_OPTS
               value: "-XX:+UseZGC -XX:+ZGenerational -Xmx2g -Xms2g -XX:+AlwaysPreTouch"

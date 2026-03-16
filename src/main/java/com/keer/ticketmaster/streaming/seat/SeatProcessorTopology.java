@@ -1,34 +1,45 @@
-package com.keer.ticketmaster.config;
+package com.keer.ticketmaster.streaming.seat;
 
 import com.keer.ticketmaster.avro.*;
-import com.keer.ticketmaster.reservation.stream.SeatAllocationProcessor;
-import com.keer.ticketmaster.reservation.stream.SectionInitProcessor;
-import com.keer.ticketmaster.reservation.stream.SectionStatusEmitter;
+import com.keer.ticketmaster.config.KafkaConstants;
 import io.confluent.kafka.streams.serdes.avro.SpecificAvroSerde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.kstream.*;
+import org.apache.kafka.streams.kstream.Consumed;
+import org.apache.kafka.streams.kstream.Produced;
+import org.apache.kafka.streams.kstream.ValueMapper;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.StoreBuilder;
 import org.apache.kafka.streams.state.Stores;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
-import org.springframework.kafka.annotation.EnableKafkaStreams;
 
 import java.util.Map;
 
+/**
+ * Seat Processor (tm-seat) topology.
+ *
+ * Consumes:
+ *   - section-init          (key=eventId-section) → SectionInitProcessor → section-status
+ *   - seat-allocation-requests (key=eventId-section) → SeatAllocationProcessor → seat-allocation-results
+ *
+ * Produces:
+ *   - seat-allocation-results (key=reservationId)
+ *   - section-status          (key=eventId-section)
+ *
+ * State store: seat-inventory-store (RocksDB)
+ */
 @Configuration
-@Profile({"event-processor", "reservation-processor", "default"})
-@EnableKafkaStreams
-public class ReservationProcessorStreamsConfig {
+@Profile({"seat-processor", "default"})
+public class SeatProcessorTopology {
 
     @Value("${spring.kafka.streams.properties[schema.registry.url]}")
     private String schemaRegistryUrl;
 
-    @Bean
-    public KStream<String, ReservationCompletedEvent> reservationPipeline(StreamsBuilder builder) {
+    @Autowired
+    public void seatProcessorPipeline(StreamsBuilder builder) {
 
         Map<String, String> serdeConfig = Map.of("schema.registry.url", schemaRegistryUrl);
 
@@ -47,7 +58,7 @@ public class ReservationProcessorStreamsConfig {
                 );
         builder.addStateStore(seatStoreBuilder);
 
-        // --- Init path: section-init → SectionInitProcessor → section-status ---
+        // --- Init path: section-init -> SectionInitProcessor -> section-status ---
         builder.stream(KafkaConstants.TOPIC_SECTION_INIT, Consumed.with(Serdes.String(), sectionInitSerde))
                 .process(SectionInitProcessor::new, KafkaConstants.SEAT_INVENTORY_STORE)
                 .mapValues((ValueMapper<SectionSeatState, SectionStatusEvent>) state ->
@@ -59,13 +70,13 @@ public class ReservationProcessorStreamsConfig {
                                 .build())
                 .to(KafkaConstants.TOPIC_SECTION_STATUS, Produced.with(Serdes.String(), statusEventSerde));
 
-        // --- Allocation path: reservation-commands → SeatAllocationProcessor → reservation-completed ---
-        var completedStream = builder.stream(KafkaConstants.TOPIC_RESERVATION_COMMANDS, Consumed.with(Serdes.String(), commandSerde))
+        // --- Allocation path: seat-allocation-requests -> SeatAllocationProcessor -> seat-allocation-results ---
+        var completedStream = builder.stream(KafkaConstants.TOPIC_SEAT_ALLOCATION_REQUESTS, Consumed.with(Serdes.String(), commandSerde))
                 .process(SeatAllocationProcessor::new, KafkaConstants.SEAT_INVENTORY_STORE);
 
-        completedStream.to(KafkaConstants.TOPIC_RESERVATION_COMPLETED, Produced.with(Serdes.String(), completedSerde));
+        completedStream.to(KafkaConstants.TOPIC_SEAT_ALLOCATION_RESULTS, Produced.with(Serdes.String(), completedSerde));
 
-        // --- Status update path: allocation results → SectionStatusEmitter → section-status ---
+        // --- Status update path: allocation results -> SectionStatusEmitter -> section-status ---
         completedStream
                 .process(SectionStatusEmitter::new, KafkaConstants.SEAT_INVENTORY_STORE)
                 .mapValues((ValueMapper<SectionSeatState, SectionStatusEvent>) state ->
@@ -77,7 +88,6 @@ public class ReservationProcessorStreamsConfig {
                                 .build())
                 .to(KafkaConstants.TOPIC_SECTION_STATUS, Produced.with(Serdes.String(), statusEventSerde));
 
-        return null;
     }
 
     private static <T extends org.apache.avro.specific.SpecificRecord> SpecificAvroSerde<T> newAvroSerde(

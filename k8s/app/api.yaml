@@ -4,7 +4,8 @@ metadata:
   name: api
   namespace: ticketmaster
 spec:
-  replicas: 5
+  # 8 replicas for 10K HTTP RPS + KTable consumption
+  replicas: 8
   selector:
     matchLabels:
       app: api
@@ -20,9 +21,16 @@ spec:
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: api
-            - name: RESERVATION_PROCESSOR_URL
-              value: "http://reservation-processor.ticketmaster.svc.cluster.local:8180"
-            # ZGC + larger heap for 1M DeferredResults
+            # Pod IP for interactive query routing (KTable on reservation-completed)
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: KAFKA_STREAMS_APP_SERVER
+              value: "$(POD_IP):8080"
+            - name: SPRING_KAFKA_STREAMS_PROPERTIES_NUM_STREAM_THREADS
+              value: "2"
+            # ZGC + larger heap for DeferredResults
             - name: JAVA_OPTS
               value: "-XX:+UseZGC -XX:+ZGenerational -Xmx1g -Xms1g -XX:+AlwaysPreTouch"
           envFrom:

@@ -1,4 +1,4 @@
-package com.keer.ticketmaster.reservation.stream;
+package com.keer.ticketmaster.streaming.seat;
 
 import com.keer.ticketmaster.avro.SectionSeatState;
 import com.keer.ticketmaster.avro.ReservationCommand;

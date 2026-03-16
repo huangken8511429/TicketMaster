@@ -1,4 +1,4 @@
-package com.keer.ticketmaster.reservation.stream;
+package com.keer.ticketmaster.streaming.seat;
 
 import com.keer.ticketmaster.avro.*;
 import com.keer.ticketmaster.config.KafkaConstants;
@@ -21,13 +21,19 @@ import org.junit.jupiter.api.BeforeEach;
 import java.util.Map;
 import java.util.Properties;
 
+/**
+ * Test base that mirrors the SeatProcessorTopology:
+ * - section-init -> SectionInitProcessor -> section-status
+ * - seat-allocation-requests -> SeatAllocationProcessor -> seat-allocation-results
+ * - allocation results -> SectionStatusEmitter -> section-status
+ */
 public abstract class StreamProcessorTestBase {
 
     protected TopologyTestDriver testDriver;
     protected TestInputTopic<String, SectionInitCommand> sectionInitInput;
-    protected TestInputTopic<String, ReservationCommand> reservationCommandInput;
+    protected TestInputTopic<String, ReservationCommand> seatAllocationRequestInput;
     protected TestOutputTopic<String, SectionStatusEvent> sectionStatusOutput;
-    protected TestOutputTopic<String, ReservationCompletedEvent> reservationCompletedOutput;
+    protected TestOutputTopic<String, ReservationCompletedEvent> seatAllocationResultOutput;
 
     private SchemaRegistryClient schemaRegistryClient;
 
@@ -52,7 +58,7 @@ public abstract class StreamProcessorTestBase {
                 );
         builder.addStateStore(seatStoreBuilder);
 
-        // Init path: section-init → SectionInitProcessor → section-status
+        // Init path: section-init -> SectionInitProcessor -> section-status
         builder.stream(KafkaConstants.TOPIC_SECTION_INIT, Consumed.with(Serdes.String(), sectionInitSerde))
                 .process(SectionInitProcessor::new, KafkaConstants.SEAT_INVENTORY_STORE)
                 .mapValues((ValueMapper<SectionSeatState, SectionStatusEvent>) state ->
@@ -64,13 +70,13 @@ public abstract class StreamProcessorTestBase {
                                 .build())
                 .to(KafkaConstants.TOPIC_SECTION_STATUS, Produced.with(Serdes.String(), statusEventSerde));
 
-        // Allocation path: reservation-commands → SeatAllocationProcessor → reservation-completed
-        var completedStream = builder.stream(KafkaConstants.TOPIC_RESERVATION_COMMANDS, Consumed.with(Serdes.String(), commandSerde))
+        // Allocation path: seat-allocation-requests -> SeatAllocationProcessor -> seat-allocation-results
+        var completedStream = builder.stream(KafkaConstants.TOPIC_SEAT_ALLOCATION_REQUESTS, Consumed.with(Serdes.String(), commandSerde))
                 .process(SeatAllocationProcessor::new, KafkaConstants.SEAT_INVENTORY_STORE);
 
-        completedStream.to(KafkaConstants.TOPIC_RESERVATION_COMPLETED, Produced.with(Serdes.String(), completedSerde));
+        completedStream.to(KafkaConstants.TOPIC_SEAT_ALLOCATION_RESULTS, Produced.with(Serdes.String(), completedSerde));
 
-        // Status update path: allocation results → SectionStatusEmitter → section-status
+        // Status update path: allocation results -> SectionStatusEmitter -> section-status
         completedStream
                 .process(SectionStatusEmitter::new, KafkaConstants.SEAT_INVENTORY_STORE)
                 .mapValues((ValueMapper<SectionSeatState, SectionStatusEvent>) state ->
@@ -92,15 +98,14 @@ public abstract class StreamProcessorTestBase {
 
         testDriver = new TopologyTestDriver(topology, props);
 
-        // Create test input/output topics
         sectionInitInput = testDriver.createInputTopic(
                 KafkaConstants.TOPIC_SECTION_INIT,
                 new StringSerializer(),
                 sectionInitSerde.serializer()
         );
 
-        reservationCommandInput = testDriver.createInputTopic(
-                KafkaConstants.TOPIC_RESERVATION_COMMANDS,
+        seatAllocationRequestInput = testDriver.createInputTopic(
+                KafkaConstants.TOPIC_SEAT_ALLOCATION_REQUESTS,
                 new StringSerializer(),
                 commandSerde.serializer()
         );
@@ -111,8 +116,8 @@ public abstract class StreamProcessorTestBase {
                 statusEventSerde.deserializer()
         );
 
-        reservationCompletedOutput = testDriver.createOutputTopic(
-                KafkaConstants.TOPIC_RESERVATION_COMPLETED,
+        seatAllocationResultOutput = testDriver.createOutputTopic(
+                KafkaConstants.TOPIC_SEAT_ALLOCATION_RESULTS,
                 new StringDeserializer(),
                 completedSerde.deserializer()
         );

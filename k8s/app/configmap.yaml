@@ -10,7 +10,7 @@ data:
   SPRING_DATASOURCE_PASSWORD: "secret"
   SPRING_DATA_REDIS_HOST: "redis.ticketmaster.svc.cluster.local"
   SPRING_DATA_REDIS_PORT: "6379"
-  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka.ticketmaster.svc.cluster.local:9092"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka-1.ticketmaster.svc.cluster.local:9092,kafka-2.ticketmaster.svc.cluster.local:9092,kafka-3.ticketmaster.svc.cluster.local:9092"
   SPRING_KAFKA_STREAMS_PROPERTIES_SCHEMA_REGISTRY_URL: "http://schema-registry.ticketmaster.svc.cluster.local:8081"
   SPRING_KAFKA_PRODUCER_PROPERTIES_SCHEMA_REGISTRY_URL: "http://schema-registry.ticketmaster.svc.cluster.local:8081"
   SPRING_KAFKA_CONSUMER_PROPERTIES_SCHEMA_REGISTRY_URL: "http://schema-registry.ticketmaster.svc.cluster.local:8081"
