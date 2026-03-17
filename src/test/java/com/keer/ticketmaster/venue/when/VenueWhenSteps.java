@@ -2,12 +2,11 @@ package com.keer.ticketmaster.venue.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keer.ticketmaster.ScenarioContext;
-import com.keer.ticketmaster.venue.dto.VenueRequest;
-import com.keer.ticketmaster.venue.repository.VenueRepository;
+import com.keer.ticketmaster.request.VenueRequest;
+import com.keer.ticketmaster.repository.VenueRepository;
 import io.cucumber.java.zh_tw.當;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.stereotype.Component;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 

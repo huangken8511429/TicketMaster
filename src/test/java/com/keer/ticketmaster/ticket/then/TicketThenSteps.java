@@ -3,7 +3,7 @@ package com.keer.ticketmaster.ticket.then;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.type.CollectionType;
 import com.keer.ticketmaster.ScenarioContext;
-import com.keer.ticketmaster.ticket.dto.TicketResponse;
+import com.keer.ticketmaster.response.TicketResponse;
 import io.cucumber.java.zh_tw.那麼;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MvcResult;

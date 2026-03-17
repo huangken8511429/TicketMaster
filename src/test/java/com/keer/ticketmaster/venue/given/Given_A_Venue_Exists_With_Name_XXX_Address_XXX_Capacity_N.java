@@ -1,7 +1,7 @@
 package com.keer.ticketmaster.venue.given;
 
-import com.keer.ticketmaster.venue.model.Venue;
-import com.keer.ticketmaster.venue.repository.VenueRepository;
+import com.keer.ticketmaster.po.Venue;
+import com.keer.ticketmaster.repository.VenueRepository;
 
 /**
  * Given: 系統中已存在一個場館，名稱為「{name}」，地址為「{address}」，容量為 {capacity}

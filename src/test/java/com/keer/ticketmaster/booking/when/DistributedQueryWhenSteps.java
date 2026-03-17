@@ -1,8 +1,8 @@
 package com.keer.ticketmaster.booking.when;
 
 import com.keer.ticketmaster.ScenarioContext;
-import com.keer.ticketmaster.booking.dto.BookingResponse;
-import com.keer.ticketmaster.booking.service.InteractiveQueryService;
+import com.keer.ticketmaster.response.BookingResponse;
+import com.keer.ticketmaster.service.InteractiveQueryService;
 import io.cucumber.java.zh_tw.當;
 import org.springframework.beans.factory.annotation.Autowired;
 

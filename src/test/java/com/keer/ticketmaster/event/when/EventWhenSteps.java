@@ -2,8 +2,8 @@ package com.keer.ticketmaster.event.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keer.ticketmaster.ScenarioContext;
-import com.keer.ticketmaster.event.dto.EventRequest;
-import com.keer.ticketmaster.event.repository.EventRepository;
+import com.keer.ticketmaster.request.EventRequest;
+import com.keer.ticketmaster.repository.EventRepository;
 import io.cucumber.java.zh_tw.當;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;

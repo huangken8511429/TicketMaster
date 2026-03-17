@@ -2,8 +2,8 @@ package com.keer.ticketmaster.booking.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keer.ticketmaster.ScenarioContext;
-import com.keer.ticketmaster.booking.dto.BookingRequest;
-import com.keer.ticketmaster.booking.dto.BookingResponse;
+import com.keer.ticketmaster.request.BookingRequest;
+import com.keer.ticketmaster.response.BookingResponse;
 import io.cucumber.java.zh_tw.當;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;

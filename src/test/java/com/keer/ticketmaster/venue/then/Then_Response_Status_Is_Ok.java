@@ -2,9 +2,8 @@ package com.keer.ticketmaster.venue.then;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keer.ticketmaster.ScenarioContext;
-import com.keer.ticketmaster.venue.dto.VenueResponse;
+import com.keer.ticketmaster.response.VenueResponse;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.junit.jupiter.api.Assertions.*;

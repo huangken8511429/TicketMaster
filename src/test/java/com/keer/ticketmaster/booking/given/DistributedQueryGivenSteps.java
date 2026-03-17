@@ -2,8 +2,8 @@ package com.keer.ticketmaster.booking.given;
 
 import com.keer.ticketmaster.ScenarioContext;
 import com.keer.ticketmaster.avro.BookingCompletedEvent;
-import com.keer.ticketmaster.booking.dto.BookingResponse;
-import com.keer.ticketmaster.booking.service.InteractiveQueryService;
+import com.keer.ticketmaster.response.BookingResponse;
+import com.keer.ticketmaster.service.InteractiveQueryService;
 import io.cucumber.java.zh_tw.假如;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.streams.KafkaStreams;

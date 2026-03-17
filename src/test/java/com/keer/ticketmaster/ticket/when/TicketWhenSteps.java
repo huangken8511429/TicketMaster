@@ -2,7 +2,7 @@ package com.keer.ticketmaster.ticket.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keer.ticketmaster.ScenarioContext;
-import com.keer.ticketmaster.ticket.dto.TicketRequest;
+import com.keer.ticketmaster.request.TicketRequest;
 import io.cucumber.java.zh_tw.當;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;

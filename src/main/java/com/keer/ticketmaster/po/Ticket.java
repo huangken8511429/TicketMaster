@@ -1,0 +1,40 @@
+package com.keer.ticketmaster.po;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.math.BigDecimal;
+
+@Entity
+@Table(name = "ticket")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class Ticket {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "event_id", nullable = false)
+    private Event event;
+
+    @Column(nullable = false)
+    private BigDecimal price;
+
+    @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    private TicketStatus status = TicketStatus.AVAILABLE;
+
+    private String userId;
+
+    @Embedded
+    private Seat seat;
+
+    public enum TicketStatus {
+        AVAILABLE, BOOKED
+    }
+}

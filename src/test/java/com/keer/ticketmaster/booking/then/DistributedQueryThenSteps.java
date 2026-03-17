@@ -1,7 +1,7 @@
 package com.keer.ticketmaster.booking.then;
 
 import com.keer.ticketmaster.ScenarioContext;
-import com.keer.ticketmaster.booking.dto.BookingResponse;
+import com.keer.ticketmaster.response.BookingResponse;
 import io.cucumber.java.zh_tw.並且;
 import io.cucumber.java.zh_tw.那麼;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -1,7 +1,10 @@
 package com.keer.ticketmaster.booking.service;
 
 import com.keer.ticketmaster.avro.BookingCompletedEvent;
-import com.keer.ticketmaster.booking.dto.BookingResponse;
+import com.keer.ticketmaster.exception.RemoteQueryException;
+import com.keer.ticketmaster.exception.StoreNotReadyException;
+import com.keer.ticketmaster.response.BookingResponse;
+import com.keer.ticketmaster.service.InteractiveQueryService;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyQueryMetadata;

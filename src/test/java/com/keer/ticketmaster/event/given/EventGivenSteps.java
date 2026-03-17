@@ -1,10 +1,10 @@
 package com.keer.ticketmaster.event.given;
 
 import com.keer.ticketmaster.ScenarioContext;
-import com.keer.ticketmaster.event.model.Event;
-import com.keer.ticketmaster.event.repository.EventRepository;
-import com.keer.ticketmaster.venue.model.Venue;
-import com.keer.ticketmaster.venue.repository.VenueRepository;
+import com.keer.ticketmaster.po.Event;
+import com.keer.ticketmaster.repository.EventRepository;
+import com.keer.ticketmaster.po.Venue;
+import com.keer.ticketmaster.repository.VenueRepository;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.假如;
 import org.springframework.beans.factory.annotation.Autowired;

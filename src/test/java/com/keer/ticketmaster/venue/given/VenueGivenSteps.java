@@ -1,12 +1,11 @@
 package com.keer.ticketmaster.venue.given;
 
 import com.keer.ticketmaster.ScenarioContext;
-import com.keer.ticketmaster.venue.model.Venue;
-import com.keer.ticketmaster.venue.repository.VenueRepository;
+import com.keer.ticketmaster.po.Venue;
+import com.keer.ticketmaster.repository.VenueRepository;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.假如;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
