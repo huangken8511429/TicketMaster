@@ -22,8 +22,8 @@ public class VenueService {
     public VenueResponse createVenue(VenueRequest request) {
         Venue venue = new Venue();
         venue.setName(request.getName());
-        venue.setAddress(request.getAddress());
-        venue.setCapacity(request.getCapacity());
+        venue.setLocation(request.getLocation());
+        venue.setSeatMap(request.getSeatMap());
         Venue saved = venueRepository.save(venue);
         return toResponse(saved);
     }
@@ -44,8 +44,8 @@ public class VenueService {
         return VenueResponse.builder()
                 .id(venue.getId())
                 .name(venue.getName())
-                .address(venue.getAddress())
-                .capacity(venue.getCapacity())
+                .location(venue.getLocation())
+                .seatMap(venue.getSeatMap())
                 .build();
     }
 }

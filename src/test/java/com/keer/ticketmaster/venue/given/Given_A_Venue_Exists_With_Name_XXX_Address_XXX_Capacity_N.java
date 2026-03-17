@@ -15,11 +15,10 @@ public class Given_A_Venue_Exists_With_Name_XXX_Address_XXX_Capacity_N {
         this.venueRepository = venueRepository;
     }
 
-    public Venue execute(String name, String address, int capacity) {
+    public Venue execute(String name, String location) {
         Venue venue = new Venue();
         venue.setName(name);
-        venue.setAddress(address);
-        venue.setCapacity(capacity);
+        venue.setLocation(location);
         return venueRepository.save(venue);
     }
 }

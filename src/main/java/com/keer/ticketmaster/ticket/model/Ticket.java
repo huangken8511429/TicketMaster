@@ -24,16 +24,18 @@ public class Ticket {
     private Event event;
 
     @Column(nullable = false)
-    private String seatNumber;
+    private BigDecimal price;
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     private TicketStatus status = TicketStatus.AVAILABLE;
 
-    @Column(nullable = false)
-    private BigDecimal price;
+    private String userId;
+
+    @Embedded
+    private Seat seat;
 
     public enum TicketStatus {
-        AVAILABLE, RESERVED, SOLD
+        AVAILABLE, BOOKED
     }
 }

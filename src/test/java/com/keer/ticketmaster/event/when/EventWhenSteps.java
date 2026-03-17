@@ -10,7 +10,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 
@@ -32,7 +32,7 @@ public class EventWhenSteps {
     public void 我建立一個活動(String name, String description, String eventDate) throws Exception {
         Long venueId = (Long) scenarioContext.get("createdVenueId");
 
-        EventRequest request = new EventRequest(name, description, LocalDate.parse(eventDate), venueId, null);
+        EventRequest request = new EventRequest(name, description, LocalDateTime.parse(eventDate + "T00:00:00"), null, venueId, null, null);
 
         MvcResult result = mockMvc.perform(
                 post("/api/events")

@@ -20,8 +20,8 @@ public class Venue {
     private String name;
 
     @Column(nullable = false)
-    private String address;
+    private String location;
 
-    @Column(nullable = false)
-    private Integer capacity;
+    @Column(columnDefinition = "TEXT")
+    private String seatMap;
 }

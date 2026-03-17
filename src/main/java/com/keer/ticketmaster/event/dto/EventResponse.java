@@ -5,7 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
@@ -19,11 +19,15 @@ public class EventResponse {
 
     private String description;
 
-    private LocalDate eventDate;
+    private LocalDateTime eventStartTime;
+
+    private LocalDateTime eventEndTime;
 
     private Long venueId;
 
     private String venueName;
+
+    private String performerName;
 
     private Integer totalSeats;
 }

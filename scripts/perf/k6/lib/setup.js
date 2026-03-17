@@ -18,8 +18,8 @@ export function createTestData() {
   // 1. Create venue
   const venuePayload = JSON.stringify({
     name: VENUE_NAME,
-    address: '123 Performance Street',
-    capacity: NUM_SECTIONS * ROWS_PER_SECTION * SEATS_PER_ROW,
+    location: '123 Performance Street',
+    seatMap: null,
   });
 
   const venueRes = http.post(`${BASE_URL}/api/venues`, venuePayload, HEADERS);
@@ -36,7 +36,7 @@ export function createTestData() {
   const sections = [];
   for (let i = 0; i < NUM_SECTIONS; i++) {
     sections.push({
-      section: `S${i}`,
+      name: `S${i}`,
       rows: ROWS_PER_SECTION,
       seatsPerRow: SEATS_PER_ROW,
     });
@@ -50,7 +50,7 @@ export function createTestData() {
   const eventPayload = JSON.stringify({
     name: EVENT_NAME,
     description: EVENT_DESCRIPTION,
-    eventDate: eventDate,
+    eventStartTime: eventDate + 'T00:00:00',
     venueId: venueId,
     sections: sections,
   });
@@ -69,6 +69,6 @@ export function createTestData() {
 
   return {
     eventId: event.id,
-    sections: sections.map((s) => s.section),
+    sections: sections.map((s) => s.name),
   };
 }

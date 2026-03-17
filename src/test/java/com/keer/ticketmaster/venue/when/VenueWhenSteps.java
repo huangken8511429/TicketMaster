@@ -29,7 +29,7 @@ public class VenueWhenSteps {
 
     @當("^我建立一個場館，名稱為「(.+)」，地址為「(.+)」，容量為 (\\d+)$")
     public void 我建立一個場館(String name, String address, int capacity) throws Exception {
-        VenueRequest request = new VenueRequest(name, address, capacity);
+        VenueRequest request = new VenueRequest(name, address, null);
 
         MvcResult result = mockMvc.perform(
                 post("/api/venues")

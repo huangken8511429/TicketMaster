@@ -4,6 +4,7 @@ import com.keer.ticketmaster.event.model.Event;
 import com.keer.ticketmaster.event.repository.EventRepository;
 import com.keer.ticketmaster.ticket.dto.TicketRequest;
 import com.keer.ticketmaster.ticket.dto.TicketResponse;
+import com.keer.ticketmaster.ticket.model.Seat;
 import com.keer.ticketmaster.ticket.model.Ticket;
 import com.keer.ticketmaster.ticket.repository.TicketRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +31,7 @@ public class TicketService {
 
         Ticket ticket = new Ticket();
         ticket.setEvent(event);
-        ticket.setSeatNumber(request.getSeatNumber());
+        ticket.setSeat(new Seat(request.getSection(), request.getRow(), request.getCol()));
         ticket.setPrice(request.getPrice());
         ticket.setStatus(Ticket.TicketStatus.AVAILABLE);
         Ticket saved = ticketRepository.save(ticket);
@@ -59,7 +60,7 @@ public class TicketService {
 
     /**
      * Evict cache for available tickets when inventory changes.
-     * Called after reservation confirmation to invalidate stale cache.
+     * Called after booking confirmation to invalidate stale cache.
      */
     @CacheEvict(value = "tickets:available", key = "#eventId")
     public void evictAvailableTicketsCache(Long eventId) {
@@ -67,13 +68,17 @@ public class TicketService {
     }
 
     private TicketResponse toResponse(Ticket ticket) {
+        Seat seat = ticket.getSeat();
         return TicketResponse.builder()
                 .id(ticket.getId())
                 .eventId(ticket.getEvent().getId())
                 .eventName(ticket.getEvent().getName())
-                .seatNumber(ticket.getSeatNumber())
+                .section(seat != null ? seat.getSection() : null)
+                .seatRow(seat != null ? seat.getSeatRow() : 0)
+                .seatCol(seat != null ? seat.getSeatCol() : 0)
                 .status(ticket.getStatus().name())
                 .price(ticket.getPrice())
+                .userId(ticket.getUserId())
                 .build();
     }
 }

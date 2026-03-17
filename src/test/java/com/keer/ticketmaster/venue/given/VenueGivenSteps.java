@@ -25,13 +25,20 @@ public class VenueGivenSteps {
     }
 
     @假如("^系統中已存在一個場館，名稱為「(.+)」，地址為「(.+)」，容量為 (\\d+)$")
-    public void 系統中已存在一個場館(String name, String address, int capacity) {
+    public void 系統中已存在一個場館_舊格式(String name, String address, int capacity) {
         Venue venue = new Venue();
         venue.setName(name);
-        venue.setAddress(address);
-        venue.setCapacity(capacity);
+        venue.setLocation(address);
         Venue saved = venueRepository.save(venue);
-        // 將創建的場館 ID 存入 ScenarioContext 供 When 步驟使用
+        scenarioContext.set("createdVenueId", saved.getId());
+    }
+
+    @假如("^系統中已存在一個場館，名稱為「(.+)」，地點為「(.+)」$")
+    public void 系統中已存在一個場館(String name, String location) {
+        Venue venue = new Venue();
+        venue.setName(name);
+        venue.setLocation(location);
+        Venue saved = venueRepository.save(venue);
         scenarioContext.set("createdVenueId", saved.getId());
     }
 
@@ -41,8 +48,7 @@ public class VenueGivenSteps {
         for (Map<String, String> row : rows) {
             Venue venue = new Venue();
             venue.setName(row.get("name"));
-            venue.setAddress(row.get("address"));
-            venue.setCapacity(Integer.parseInt(row.get("capacity")));
+            venue.setLocation(row.get("location") != null ? row.get("location") : row.get("address"));
             venueRepository.save(venue);
         }
     }

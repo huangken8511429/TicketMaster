@@ -35,10 +35,10 @@ public class VenueThenSteps {
                     .constructCollectionType(List.class, VenueResponse.class);
             List<VenueResponse> venues = objectMapper.readValue(responseBody, listType);
             assertFalse(venues.isEmpty(), "場館列表不應為空");
-            validateVenue(venues.get(0), expectedName, expectedAddress, expectedCapacity);
+            validateVenue(venues.get(0), expectedName, expectedAddress);
         } else {
             VenueResponse response = objectMapper.readValue(responseBody, VenueResponse.class);
-            validateVenue(response, expectedName, expectedAddress, expectedCapacity);
+            validateVenue(response, expectedName, expectedAddress);
         }
     }
 
@@ -57,12 +57,10 @@ public class VenueThenSteps {
     }
 
     private void validateVenue(VenueResponse response, String expectedName,
-                               String expectedAddress, int expectedCapacity) {
+                               String expectedLocation) {
         assertEquals(expectedName, response.getName(),
                 "場館名稱應為 " + expectedName);
-        assertEquals(expectedAddress, response.getAddress(),
-                "場館地址應為 " + expectedAddress);
-        assertEquals(expectedCapacity, response.getCapacity(),
-                "場館容量應為 " + expectedCapacity);
+        assertEquals(expectedLocation, response.getLocation(),
+                "場館地點應為 " + expectedLocation);
     }
 }

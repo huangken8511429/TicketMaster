@@ -17,31 +17,31 @@ public class KafkaTopicConfig {
 
     @Bean
     public NewTopic sectionInitTopic() {
-        return TopicBuilder.name(KafkaConstants.TOPIC_SECTION_INIT).partitions(partitions).replicas(replicas).build();
+        return TopicBuilder.name(Topic.SECTION_INIT).partitions(partitions).replicas(replicas).build();
     }
 
     @Bean
     public NewTopic sectionStatusTopic() {
-        return TopicBuilder.name(KafkaConstants.TOPIC_SECTION_STATUS).partitions(partitions).replicas(replicas).build();
+        return TopicBuilder.name(Topic.SECTION_STATUS).partitions(partitions).replicas(replicas).build();
     }
 
     @Bean
-    public NewTopic reservationCommandsTopic() {
-        return TopicBuilder.name(KafkaConstants.TOPIC_RESERVATION_COMMANDS).partitions(partitions).replicas(replicas).build();
+    public NewTopic bookingCommandsTopic() {
+        return TopicBuilder.name(Topic.BOOKING_COMMANDS).partitions(partitions).replicas(replicas).build();
     }
 
     @Bean
-    public NewTopic reservationCompletedTopic() {
-        return TopicBuilder.name(KafkaConstants.TOPIC_RESERVATION_COMPLETED).partitions(partitions).replicas(replicas).build();
+    public NewTopic bookingCompletedTopic() {
+        return TopicBuilder.name(Topic.BOOKING_COMPLETED).partitions(partitions).replicas(replicas).build();
     }
 
     @Bean
     public NewTopic seatAllocationRequestsTopic() {
-        return TopicBuilder.name(KafkaConstants.TOPIC_SEAT_ALLOCATION_REQUESTS).partitions(partitions).replicas(replicas).build();
+        return TopicBuilder.name(Topic.SEAT_ALLOCATION_REQUESTS).partitions(partitions).replicas(replicas).build();
     }
 
     @Bean
     public NewTopic seatAllocationResultsTopic() {
-        return TopicBuilder.name(KafkaConstants.TOPIC_SEAT_ALLOCATION_RESULTS).partitions(partitions).replicas(replicas).build();
+        return TopicBuilder.name(Topic.SEAT_ALLOCATION_RESULTS).partitions(partitions).replicas(replicas).build();
     }
 }

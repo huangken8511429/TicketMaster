@@ -1,12 +1,15 @@
 package com.keer.ticketmaster.event.service;
 
 import com.keer.ticketmaster.avro.SectionInitCommand;
-import com.keer.ticketmaster.config.KafkaConstants;
+import com.keer.ticketmaster.config.Topic;
 import com.keer.ticketmaster.event.dto.SectionRequest;
 import com.keer.ticketmaster.event.dto.EventRequest;
 import com.keer.ticketmaster.event.dto.EventResponse;
 import com.keer.ticketmaster.event.model.Event;
+import com.keer.ticketmaster.event.model.Section;
 import com.keer.ticketmaster.event.repository.EventRepository;
+import com.keer.ticketmaster.performer.model.Performer;
+import com.keer.ticketmaster.performer.repository.PerformerRepository;
 import com.keer.ticketmaster.venue.model.Venue;
 import com.keer.ticketmaster.venue.repository.VenueRepository;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +17,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -23,6 +27,7 @@ public class EventService {
 
     private final EventRepository eventRepository;
     private final VenueRepository venueRepository;
+    private final PerformerRepository performerRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     public EventResponse createEvent(EventRequest request) {
@@ -31,11 +36,33 @@ public class EventService {
             return null;
         }
 
+        Performer performer = null;
+        if (request.getPerformerId() != null) {
+            performer = performerRepository.findById(request.getPerformerId()).orElse(null);
+        }
+
         Event event = new Event();
         event.setName(request.getName());
         event.setDescription(request.getDescription());
-        event.setEventDate(request.getEventDate());
+        event.setEventStartTime(request.getEventStartTime());
+        event.setEventEndTime(request.getEventEndTime());
         event.setVenue(venue);
+        event.setPerformer(performer);
+
+        // Create Section entities
+        if (request.getSections() != null) {
+            List<Section> sections = new ArrayList<>();
+            for (SectionRequest sr : request.getSections()) {
+                Section section = new Section();
+                section.setName(sr.getName());
+                section.setRows(sr.getRows());
+                section.setCols(sr.getSeatsPerRow());
+                section.setAvailableSeats(sr.getRows() * sr.getSeatsPerRow());
+                sections.add(section);
+            }
+            event.setSections(sections);
+        }
+
         Event saved = eventRepository.save(event);
 
         int totalSeats = 0;
@@ -61,18 +88,18 @@ public class EventService {
     }
 
     private int publishSectionInit(Long eventId, SectionRequest section) {
-        String key = eventId + "-" + section.getSection();
+        String key = eventId + "-" + section.getName();
         int totalSeats = section.getRows() * section.getSeatsPerRow();
 
         SectionInitCommand command = SectionInitCommand.newBuilder()
                 .setEventId(eventId)
-                .setSection(section.getSection())
+                .setSection(section.getName())
                 .setRows(section.getRows())
                 .setSeatsPerRow(section.getSeatsPerRow())
                 .setInitialReserved(List.of())
                 .build();
 
-        kafkaTemplate.send(KafkaConstants.TOPIC_SECTION_INIT, key, command);
+        kafkaTemplate.send(Topic.SECTION_INIT, key, command);
         return totalSeats;
     }
 
@@ -81,9 +108,11 @@ public class EventService {
                 .id(event.getId())
                 .name(event.getName())
                 .description(event.getDescription())
-                .eventDate(event.getEventDate())
+                .eventStartTime(event.getEventStartTime())
+                .eventEndTime(event.getEventEndTime())
                 .venueId(event.getVenue().getId())
                 .venueName(event.getVenue().getName())
+                .performerName(event.getPerformer() != null ? event.getPerformer().getName() : null)
                 .totalSeats(totalSeats)
                 .build();
     }

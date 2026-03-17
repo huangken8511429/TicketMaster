@@ -4,9 +4,9 @@ import com.keer.ticketmaster.event.dto.EventRequest;
 import com.keer.ticketmaster.event.dto.EventResponse;
 import com.keer.ticketmaster.event.dto.SectionRequest;
 import com.keer.ticketmaster.event.service.EventService;
-import com.keer.ticketmaster.reservation.dto.ReservationRequest;
-import com.keer.ticketmaster.reservation.dto.ReservationResponse;
-import com.keer.ticketmaster.reservation.service.ReservationService;
+import com.keer.ticketmaster.booking.dto.BookingRequest;
+import com.keer.ticketmaster.booking.dto.BookingResponse;
+import com.keer.ticketmaster.booking.service.BookingService;
 import com.keer.ticketmaster.venue.model.Venue;
 import com.keer.ticketmaster.venue.repository.VenueRepository;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.async.DeferredResult;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class LoadTestCompatController {
 
     private final EventService eventService;
-    private final ReservationService reservationService;
+    private final BookingService bookingService;
     private final VenueRepository venueRepository;
 
     private final Map<String, EventInfo> eventCache = new ConcurrentHashMap<>();
@@ -65,7 +65,7 @@ public class LoadTestCompatController {
         EventRequest eventRequest = new EventRequest();
         eventRequest.setName(request.eventName());
         eventRequest.setDescription("Load test event");
-        eventRequest.setEventDate(LocalDate.now());
+        eventRequest.setEventStartTime(LocalDateTime.now().plusDays(1));
         eventRequest.setVenueId(ensureVenue(totalCapacity));
         eventRequest.setSections(sections);
 
@@ -83,59 +83,60 @@ public class LoadTestCompatController {
         return ResponseEntity.ok(new GoEventResponse(request.eventName(), request.artist(), areas));
     }
 
+    /**
+     * V1 POST: blocks until Kafka Streams returns the result, then maps to Go client format.
+     * Single round-trip — no separate GET needed.
+     */
     @PostMapping("/v1/event/{eventName}/reservation")
-    public ResponseEntity<String> createReservation(
+    public DeferredResult<ResponseEntity<GoReservationResponse>> createReservation(
             @PathVariable String eventName,
             @RequestBody GoReservationRequest request) {
 
-        EventInfo eventInfo = eventCache.get(eventName);
-        if (eventInfo == null) {
-            return ResponseEntity.badRequest().body("Event not found: " + eventName);
-        }
-
-        ReservationRequest reservationRequest = new ReservationRequest();
-        reservationRequest.setEventId(eventInfo.eventId());
-        reservationRequest.setSection(request.areaId());
-        reservationRequest.setSeatCount(request.numOfSeats());
-        reservationRequest.setUserId(request.userId());
-
-        ReservationService.CreateResult result = reservationService.createReservation(reservationRequest);
-        return ResponseEntity.ok(result.reservationId());
-    }
-
-    /**
-     * Long-poll endpoint that wraps the internal DeferredResult and maps the response
-     * to Go client format (state instead of status, Seat{row,col} instead of "A-1").
-     */
-    @GetMapping("/v1/reservation/{reservationId}")
-    public DeferredResult<ResponseEntity<GoReservationResponse>> getReservation(
-            @PathVariable String reservationId) {
-
         DeferredResult<ResponseEntity<GoReservationResponse>> goDeferred = new DeferredResult<>(10_000L);
 
-        // Get the internal DeferredResult from the reservation service
-        DeferredResult<ResponseEntity<ReservationResponse>> internalDeferred =
-                reservationService.getReservationAsync(reservationId);
+        EventInfo eventInfo = eventCache.get(eventName);
+        if (eventInfo == null) {
+            goDeferred.setResult(ResponseEntity.badRequest().build());
+            return goDeferred;
+        }
 
-        // Poll: when the internal deferred is set, map and resolve the Go deferred
-        // We use setResultHandler on the internal deferred
+        BookingRequest bookingRequest = new BookingRequest();
+        bookingRequest.setEventId(eventInfo.eventId());
+        bookingRequest.setSection(request.areaId());
+        bookingRequest.setSeatCount(request.numOfSeats());
+        bookingRequest.setUserId(request.userId());
+
+        // Delegate to the blocking POST which returns DeferredResult<BookingResponse>
+        DeferredResult<ResponseEntity<BookingResponse>> internalDeferred =
+                bookingService.createBooking(bookingRequest);
+
         internalDeferred.setResultHandler(result -> {
-            if (result instanceof ResponseEntity<?> re && re.getBody() instanceof ReservationResponse r) {
+            if (result instanceof ResponseEntity<?> re && re.getBody() instanceof BookingResponse r) {
                 goDeferred.setResult(ResponseEntity.ok(toGoResponse(r)));
             } else {
                 goDeferred.setResult(ResponseEntity.accepted().build());
             }
         });
 
-        goDeferred.onTimeout(() -> {
-            // If Go deferred times out, ensure internal one is also cleaned up
-            internalDeferred.setResult(ResponseEntity.accepted().build());
-        });
+        goDeferred.onTimeout(() -> internalDeferred.setResult(ResponseEntity.accepted().build()));
 
         return goDeferred;
     }
 
-    private GoReservationResponse toGoResponse(ReservationResponse r) {
+    /**
+     * V1 GET: synchronous read from Kafka Streams state store via Interactive Query.
+     * Returns instantly — no long-polling.
+     */
+    @GetMapping("/v1/reservation/{bookingId}")
+    public ResponseEntity<GoReservationResponse> getReservation(@PathVariable String bookingId) {
+        BookingResponse response = bookingService.queryBooking(bookingId);
+        if (response == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(toGoResponse(response));
+    }
+
+    private GoReservationResponse toGoResponse(BookingResponse r) {
         String state = "CONFIRMED".equals(r.getStatus()) ? "RESERVED" : r.getStatus();
 
         List<GoSeat> seats = List.of();
@@ -151,7 +152,7 @@ public class LoadTestCompatController {
         }
 
         return new GoReservationResponse(
-                r.getReservationId(),
+                r.getBookingId(),
                 r.getUserId(),
                 r.getEventId() != null ? r.getEventId().toString() : null,
                 r.getSection(),
@@ -171,8 +172,8 @@ public class LoadTestCompatController {
 
             Venue venue = new Venue();
             venue.setName("Load Test Venue");
-            venue.setAddress("localhost");
-            venue.setCapacity(capacity);
+            venue.setLocation("localhost");
+            venue.setSeatMap(null);
             Venue saved = venueRepository.save(venue);
             defaultVenueId.set(saved.getId());
             return saved.getId();

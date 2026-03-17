@@ -13,7 +13,11 @@ public class TicketRequest {
 
     private Long eventId;
 
-    private String seatNumber;
+    private String section;
+
+    private int row;
+
+    private int col;
 
     private BigDecimal price;
 }

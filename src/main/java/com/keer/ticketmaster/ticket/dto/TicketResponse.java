@@ -22,9 +22,15 @@ public class TicketResponse implements Serializable {
 
     private String eventName;
 
-    private String seatNumber;
+    private String section;
+
+    private int seatRow;
+
+    private int seatCol;
 
     private String status;
 
     private BigDecimal price;
+
+    private String userId;
 }

@@ -5,7 +5,7 @@
   "fields": [
     {"name": "eventId", "type": "long"},
     {"name": "section", "type": "string"},
-    {"name": "seatStatuses", "type": {"type": "map", "values": "string"}},
+    {"name": "availableSeats", "type": {"type": "array", "items": "string"}},
     {"name": "availableCount", "type": "int"}
   ]
 }

@@ -13,5 +13,5 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
 
     List<Ticket> findByEventIdAndStatus(Long eventId, Ticket.TicketStatus status);
 
-    List<Ticket> findByEventIdAndSeatNumberIn(Long eventId, List<String> seatNumbers);
+    List<Ticket> findByEventIdAndSeatSectionAndSeatSeatRowAndSeatSeatCol(Long eventId, String section, int seatRow, int seatCol);
 }

@@ -2,9 +2,10 @@ package com.keer.ticketmaster.ticket.given;
 
 import com.keer.ticketmaster.ScenarioContext;
 import com.keer.ticketmaster.avro.SectionInitCommand;
-import com.keer.ticketmaster.config.KafkaConstants;
+import com.keer.ticketmaster.config.Topic;
 import com.keer.ticketmaster.event.model.Event;
 import com.keer.ticketmaster.event.repository.EventRepository;
+import com.keer.ticketmaster.ticket.model.Seat;
 import com.keer.ticketmaster.ticket.model.Ticket;
 import com.keer.ticketmaster.ticket.repository.TicketRepository;
 import io.cucumber.datatable.DataTable;
@@ -48,15 +49,22 @@ public class TicketGivenSteps {
         Map<String, List<String>> sectionReserved = new LinkedHashMap<>();
 
         for (Map<String, String> row : rows) {
-            Ticket ticket = new Ticket();
-            ticket.setEvent(event);
-            ticket.setSeatNumber(row.get("seatNumber"));
-            ticket.setPrice(new BigDecimal(row.get("price")));
-            ticket.setStatus(Ticket.TicketStatus.valueOf(row.get("status")));
-            ticketRepository.save(ticket);
-
             String seatNumber = row.get("seatNumber");
             String section = seatNumber.substring(0, seatNumber.indexOf('-'));
+            int col = Integer.parseInt(seatNumber.substring(seatNumber.indexOf('-') + 1));
+
+            Ticket ticket = new Ticket();
+            ticket.setEvent(event);
+            ticket.setSeat(new Seat(section, 0, col));
+            ticket.setPrice(new BigDecimal(row.get("price")));
+            String status = row.get("status");
+            if ("RESERVED".equals(status)) {
+                ticket.setStatus(Ticket.TicketStatus.BOOKED);
+            } else {
+                ticket.setStatus(Ticket.TicketStatus.valueOf(status));
+            }
+            ticketRepository.save(ticket);
+
             sectionSeats.computeIfAbsent(section, k -> new ArrayList<>()).add(seatNumber);
 
             if (!"AVAILABLE".equals(row.get("status"))) {
@@ -79,7 +87,7 @@ public class TicketGivenSteps {
                     .setInitialReserved(reserved)
                     .build();
 
-            kafkaTemplate.send(KafkaConstants.TOPIC_SECTION_INIT, key, command).get(5, TimeUnit.SECONDS);
+            kafkaTemplate.send(Topic.SECTION_INIT, key, command).get(5, TimeUnit.SECONDS);
         }
 
         // Wait for Kafka Streams to process section init

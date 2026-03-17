@@ -20,8 +20,8 @@ VENUE_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/venues" \
   -H "Content-Type: application/json" \
   -d "{
     \"name\": \"perf-venue-$(date +%s)\",
-    \"address\": \"Setup Script\",
-    \"capacity\": $CAPACITY
+    \"location\": \"Setup Script\",
+    \"seatMap\": null
   }")
 
 VENUE_HTTP_CODE=$(echo "$VENUE_RESPONSE" | tail -1)
@@ -40,7 +40,7 @@ echo "Venue created: id=$VENUE_ID"
 SECTIONS="["
 for (( i=0; i<NUM_SECTIONS; i++ )); do
   if [ "$i" -gt 0 ]; then SECTIONS+=","; fi
-  SECTIONS+="{\"section\":\"S${i}\",\"rows\":${ROWS},\"seatsPerRow\":${SEATS_PER_ROW}}"
+  SECTIONS+="{\"name\":\"S${i}\",\"rows\":${ROWS},\"seatsPerRow\":${SEATS_PER_ROW}}"
 done
 SECTIONS+="]"
 
@@ -51,7 +51,7 @@ EVENT_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/events" \
   -d "{
     \"name\": \"perf-event-$(date +%s)\",
     \"description\": \"Performance test event\",
-    \"eventDate\": \"$TOMORROW\",
+    \"eventStartTime\": \"${TOMORROW}T00:00:00\",
     \"venueId\": $VENUE_ID,
     \"sections\": $SECTIONS
   }")

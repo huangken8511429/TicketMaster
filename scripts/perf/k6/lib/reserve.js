@@ -1,4 +1,5 @@
-// Reservation flow: POST to create, GET to poll result (DeferredResult, up to 30s).
+// Reservation flow: single POST that blocks until Kafka Streams returns the result.
+// No separate GET polling needed — result comes back in the same HTTP response.
 
 import http from 'k6/http';
 import { check, group } from 'k6';
@@ -18,36 +19,23 @@ export function reserveSeats(eventId, sections, reservationTime, reservationCoun
       userId: `k6-user-${__VU}-${__ITER}`,
     });
 
-    // 1. POST reservation (expect 202 Accepted)
-    const postRes = http.post(`${BASE_URL}/api/reservations`, payload, HEADERS);
-    const postOk = check(postRes, {
-      'POST status is 202': (r) => r.status === 202,
-    });
-
-    if (!postOk) {
-      return;
-    }
-
-    const body = postRes.json();
-    const reservationId = body.reservationId;
-
-    // 2. GET reservation result (DeferredResult long-poll, up to 30s)
-    const getRes = http.get(`${BASE_URL}/api/reservations/${reservationId}`, {
+    // Single POST: blocks until Kafka Streams processes the reservation
+    const res = http.post(`${BASE_URL}/api/bookings`, payload, {
       ...HEADERS,
       timeout: '15s',
     });
-    const getOk = check(getRes, {
-      'GET status is 200': (r) => r.status === 200,
+
+    const ok = check(res, {
+      'POST status is 200': (r) => r.status === 200,
     });
 
-    if (getOk) {
-      const reservation = getRes.json();
+    if (ok) {
+      const reservation = res.json();
       check(reservation, {
         'reservation resolved': (r) => r.status === 'CONFIRMED' || r.status === 'REJECTED',
       });
 
-      const totalDuration = postRes.timings.duration + getRes.timings.duration;
-      reservationTime.add(totalDuration);
+      reservationTime.add(res.timings.duration);
       reservationCounter.add(1);
     }
   });

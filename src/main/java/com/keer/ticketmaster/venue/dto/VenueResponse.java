@@ -15,7 +15,7 @@ public class VenueResponse {
 
     private String name;
 
-    private String address;
+    private String location;
 
-    private Integer capacity;
+    private String seatMap;
 }

@@ -9,7 +9,7 @@ import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.假如;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -34,15 +34,29 @@ public class EventGivenSteps {
     }
 
     @假如("^系統中已存在一個活動，名稱為「(.+)」，描述為「(.+)」，日期為「(.+)」，關聯場館為該場館$")
-    public void 系統中已存在一個活動(String name, String description, String eventDate) {
-        // 從 ScenarioContext 取得前一步驟建立的場館 ID
+    public void 系統中已存在一個活動_舊格式(String name, String description, String eventDate) {
         Long venueId = (Long) scenarioContext.get("createdVenueId");
         Venue venue = venueRepository.findById(venueId).orElseThrow();
 
         Event event = new Event();
         event.setName(name);
         event.setDescription(description);
-        event.setEventDate(LocalDate.parse(eventDate));
+        event.setEventStartTime(LocalDateTime.parse(eventDate + "T00:00:00"));
+        event.setVenue(venue);
+        Event saved = eventRepository.save(event);
+
+        scenarioContext.set("createdEventId", saved.getId());
+    }
+
+    @假如("^系統中已存在一個活動，名稱為「(.+)」，描述為「(.+)」，開始時間為「(.+)」，關聯場館為該場館$")
+    public void 系統中已存在一個活動(String name, String description, String eventStartTime) {
+        Long venueId = (Long) scenarioContext.get("createdVenueId");
+        Venue venue = venueRepository.findById(venueId).orElseThrow();
+
+        Event event = new Event();
+        event.setName(name);
+        event.setDescription(description);
+        event.setEventStartTime(LocalDateTime.parse(eventStartTime));
         event.setVenue(venue);
         Event saved = eventRepository.save(event);
 
@@ -59,7 +73,8 @@ public class EventGivenSteps {
             Event event = new Event();
             event.setName(row.get("name"));
             event.setDescription(row.get("description"));
-            event.setEventDate(LocalDate.parse(row.get("eventDate")));
+            String startTime = row.get("eventStartTime") != null ? row.get("eventStartTime") : row.get("eventDate") + "T00:00:00";
+            event.setEventStartTime(LocalDateTime.parse(startTime));
             event.setVenue(venue);
             eventRepository.save(event);
         }

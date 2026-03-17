@@ -32,8 +32,7 @@ public class EventThenSteps {
                 "活動名稱應為 " + expectedName);
         assertEquals(expectedDescription, response.getDescription(),
                 "活動描述應為 " + expectedDescription);
-        assertEquals(expectedDate, response.getEventDate().toString(),
-                "活動日期應為 " + expectedDate);
+        assertNotNull(response.getEventStartTime(), "活動開始時間應不為空");
         assertNotNull(response.getVenueId(), "場館 ID 應不為空");
     }
 

@@ -58,31 +58,31 @@ func (s SugaredLeveledLogger) Warn(msg string, keysAndValues ...interface{}) {
 
 // POST /api/venues
 type VenueRequest struct {
-	Name     string `json:"name"`
-	Address  string `json:"address"`
-	Capacity int    `json:"capacity"`
+	Name     string  `json:"name"`
+	Location string  `json:"location"`
+	SeatMap  *string `json:"seatMap"`
 }
 
 type VenueResponse struct {
-	ID       int64  `json:"id"`
-	Name     string `json:"name"`
-	Address  string `json:"address"`
-	Capacity int    `json:"capacity"`
+	ID       int64   `json:"id"`
+	Name     string  `json:"name"`
+	Location string  `json:"location"`
+	SeatMap  *string `json:"seatMap"`
 }
 
 // POST /api/events
 type SectionRequest struct {
-	Section     string `json:"section"`
+	Name        string `json:"name"`
 	Rows        int    `json:"rows"`
 	SeatsPerRow int    `json:"seatsPerRow"`
 }
 
 type EventRequest struct {
-	Name        string           `json:"name"`
-	Description string           `json:"description"`
-	EventDate   string           `json:"eventDate"`
-	VenueID     int64            `json:"venueId"`
-	Sections    []SectionRequest `json:"sections"`
+	Name           string           `json:"name"`
+	Description    string           `json:"description"`
+	EventStartTime string           `json:"eventStartTime"`
+	VenueID        int64            `json:"venueId"`
+	Sections       []SectionRequest `json:"sections"`
 }
 
 type EventResponse struct {
@@ -91,23 +91,23 @@ type EventResponse struct {
 	TotalSeats int    `json:"totalSeats"`
 }
 
-// POST /api/reservations
-type ReservationRequest struct {
+// POST /api/bookings
+type BookingRequest struct {
 	EventID   int64  `json:"eventId"`
 	Section   string `json:"section"`
 	SeatCount int    `json:"seatCount"`
 	UserID    string `json:"userId"`
 }
 
-// POST response: { "reservationId": "...", "status": "..." }
-type CreateReservationResponse struct {
-	ReservationID string `json:"reservationId"`
-	Status        string `json:"status"`
+// POST response: { "bookingId": "...", "status": "..." }
+type CreateBookingResponse struct {
+	BookingID string `json:"bookingId"`
+	Status    string `json:"status"`
 }
 
-// GET /api/reservations/{id}
-type ReservationResponse struct {
-	ReservationID  string   `json:"reservationId"`
+// GET /api/bookings/{id}
+type BookingResponse struct {
+	BookingID      string   `json:"bookingId"`
 	EventID        int64    `json:"eventId"`
 	Section        string   `json:"section"`
 	SeatCount      int      `json:"seatCount"`
@@ -135,8 +135,8 @@ func createVenue(host string, numOfSections int) (*VenueResponse, error) {
 	url := fmt.Sprintf("http://%s/api/venues", host)
 	venue := VenueRequest{
 		Name:     "spike-venue-" + uuid.NewString()[:8],
-		Address:  "Go Spike Test",
-		Capacity: numOfSections * 20 * 20,
+		Location: "Go Spike Test",
+		SeatMap:  nil,
 	}
 
 	jsonData, err := json.Marshal(venue)
@@ -178,21 +178,21 @@ func createVenue(host string, numOfSections int) (*VenueResponse, error) {
 func createEvent(host string, venueID int64, numOfSections int) (*EventResponse, []string, error) {
 	url := fmt.Sprintf("http://%s/api/events", host)
 
-	tomorrow := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
+	tomorrow := time.Now().AddDate(0, 0, 1).Format("2006-01-02") + "T00:00:00"
 	sections := make([]SectionRequest, numOfSections)
 	sectionNames := make([]string, numOfSections)
 	for i := 0; i < numOfSections; i++ {
 		name := "S" + strconv.Itoa(i)
-		sections[i] = SectionRequest{Section: name, Rows: 20, SeatsPerRow: 20}
+		sections[i] = SectionRequest{Name: name, Rows: 20, SeatsPerRow: 20}
 		sectionNames[i] = name
 	}
 
 	event := EventRequest{
-		Name:        "spike-event-" + uuid.NewString()[:8],
-		Description: "Go spike test",
-		EventDate:   tomorrow,
-		VenueID:     venueID,
-		Sections:    sections,
+		Name:           "spike-event-" + uuid.NewString()[:8],
+		Description:    "Go spike test",
+		EventStartTime: tomorrow,
+		VenueID:        venueID,
+		Sections:       sections,
 	}
 
 	jsonData, err := json.Marshal(event)
@@ -231,10 +231,12 @@ func createEvent(host string, venueID int64, numOfSections int) (*EventResponse,
 	return &created, sectionNames, nil
 }
 
-func createReservation(host string, eventID int64, section string) (string, *httpstat.Result, error) {
-	url := fmt.Sprintf("http://%s/api/reservations", host)
+// createReservation sends a POST that blocks until Kafka Streams returns the result.
+// Returns the full ReservationResponse directly — no separate GET needed.
+func createBooking(host string, eventID int64, section string) (*BookingResponse, *httpstat.Result, error) {
+	url := fmt.Sprintf("http://%s/api/bookings", host)
 
-	payload := ReservationRequest{
+	payload := BookingRequest{
 		EventID:   eventID,
 		Section:   section,
 		SeatCount: rand.Intn(4) + 1,
@@ -243,7 +245,7 @@ func createReservation(host string, eventID int64, section string) (string, *htt
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return "", nil, fmt.Errorf("error marshaling JSON: %w", err)
+		return nil, nil, fmt.Errorf("error marshaling JSON: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -254,35 +256,35 @@ func createReservation(host string, eventID int64, section string) (string, *htt
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", nil, fmt.Errorf("error creating request: %w", err)
+		return nil, nil, fmt.Errorf("error creating request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := getClient().Do(req)
 	if err != nil {
-		return "", &result, fmt.Errorf("error sending request: %w", err)
+		return nil, &result, fmt.Errorf("error sending request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", &result, fmt.Errorf("error reading response: %w", err)
+		return nil, &result, fmt.Errorf("error reading response: %w", err)
 	}
 	result.End(time.Now())
 
-	if resp.StatusCode != http.StatusAccepted {
-		return "", &result, fmt.Errorf("POST reservation failed: %d %s", resp.StatusCode, string(body))
+	if resp.StatusCode != http.StatusOK {
+		return nil, &result, fmt.Errorf("POST booking failed: %d %s", resp.StatusCode, string(body))
 	}
 
-	var createResp CreateReservationResponse
-	if err := json.Unmarshal(body, &createResp); err != nil {
-		return "", &result, fmt.Errorf("error parsing POST response: %w", err)
+	var booking BookingResponse
+	if err := json.Unmarshal(body, &booking); err != nil {
+		return nil, &result, fmt.Errorf("error parsing POST response: %w", err)
 	}
-	return createResp.ReservationID, &result, nil
+	return &booking, &result, nil
 }
 
-func getReservation(host string, reservationID string) (*ReservationResponse, *httpstat.Result, error) {
-	url := fmt.Sprintf("http://%s/api/reservations/%s", host, reservationID)
+func getBooking(host string, bookingID string) (*BookingResponse, *httpstat.Result, error) {
+	url := fmt.Sprintf("http://%s/api/bookings/%s", host, bookingID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -302,7 +304,7 @@ func getReservation(host string, reservationID string) (*ReservationResponse, *h
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, &result, fmt.Errorf("GET reservation %d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+		return nil, &result, fmt.Errorf("GET booking %d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -311,11 +313,11 @@ func getReservation(host string, reservationID string) (*ReservationResponse, *h
 	}
 	result.End(time.Now())
 
-	var reservation ReservationResponse
-	if err := json.Unmarshal(body, &reservation); err != nil {
-		return nil, &result, fmt.Errorf("error parsing reservation: %w", err)
+	var booking BookingResponse
+	if err := json.Unmarshal(body, &booking); err != nil {
+		return nil, &result, fmt.Errorf("error parsing booking: %w", err)
 	}
-	return &reservation, &result, nil
+	return &booking, &result, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -375,7 +377,7 @@ func initHTTPClients(enableHTTP2 bool, numOfClients int, host string) {
 // ---------------------------------------------------------------------------
 
 type Result struct {
-	reservation *ReservationResponse
+	reservation *BookingResponse
 	err         error
 	postStats   *httpstat.Result
 	getStats    *httpstat.Result
@@ -394,24 +396,16 @@ func createConcurrentRequests(host string, eventID int64, sections []string, num
 			section := sections[rand.Intn(len(sections))]
 			startTime := time.Now()
 
-			reservationID, postStats, err := createReservation(host, eventID, section)
+			// Single POST returns full result — no separate GET needed
+			reservation, postStats, err := createBooking(host, eventID, section)
 			if err != nil {
 				resultChan <- Result{err: err, postStats: postStats, latency: time.Since(startTime)}
-				return
-			}
-
-			time.Sleep(timeOfSleep)
-
-			reservation, getStats, err := getReservation(host, reservationID)
-			if err != nil {
-				resultChan <- Result{err: err, postStats: postStats, getStats: getStats, latency: time.Since(startTime)}
 				return
 			}
 
 			resultChan <- Result{
 				reservation: reservation,
 				postStats:   postStats,
-				getStats:    getStats,
 				latency:     time.Since(startTime),
 			}
 		}()

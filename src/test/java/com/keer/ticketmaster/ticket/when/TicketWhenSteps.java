@@ -28,7 +28,10 @@ public class TicketWhenSteps {
     public void 我建立一張票券(String seatNumber, int price) throws Exception {
         Long eventId = (Long) scenarioContext.get("createdEventId");
 
-        TicketRequest request = new TicketRequest(eventId, seatNumber, new BigDecimal(price));
+        // Parse seatNumber like "A-1" into section="A", col=1
+        String section = seatNumber.substring(0, seatNumber.indexOf('-'));
+        int col = Integer.parseInt(seatNumber.substring(seatNumber.indexOf('-') + 1));
+        TicketRequest request = new TicketRequest(eventId, section, 0, col, new BigDecimal(price));
 
         MvcResult result = mockMvc.perform(
                 post("/api/tickets")
