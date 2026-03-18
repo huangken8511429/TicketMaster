@@ -31,20 +31,8 @@ public class BookingPendingRequests {
         String bookingId = event.getBookingId();
         DeferredResult<ResponseEntity<BookingResponse>> deferred = pending.remove(bookingId);
         if (deferred != null) {
-            deferred.setResult(ResponseEntity.ok(toResponse(event)));
+            deferred.setResult(ResponseEntity.ok(BookingResponse.fromEvent(event)));
             log.debug("Resolved pending request for booking {}", bookingId);
         }
-    }
-
-    private BookingResponse toResponse(BookingCompletedEvent event) {
-        return BookingResponse.builder()
-                .bookingId(event.getBookingId())
-                .eventId(event.getEventId())
-                .section(event.getSection())
-                .seatCount(event.getSeatCount())
-                .userId(event.getUserId())
-                .status(event.getStatus())
-                .allocatedSeats(event.getAllocatedSeats())
-                .build();
     }
 }

@@ -15,7 +15,7 @@ class SectionStatusEmitterTest extends StreamProcessorTestBase {
         sectionStatusOutput.readKeyValuesToList();
 
         BookingCommand command = buildBookingCommand("r1", 1L, "A", 2, "user1");
-        seatAllocationRequestInput.pipeInput("1-A", command);
+        seatAllocationRequestInput.pipeInput("1-A-0", command);
 
         BookingCompletedEvent completed = seatAllocationResultOutput.readValue();
         assertEquals("CONFIRMED", completed.getStatus());
@@ -33,7 +33,7 @@ class SectionStatusEmitterTest extends StreamProcessorTestBase {
         sectionStatusOutput.readKeyValuesToList();
 
         BookingCommand command = buildBookingCommand("r1", 1L, "A", 5, "user1");
-        seatAllocationRequestInput.pipeInput("1-A", command);
+        seatAllocationRequestInput.pipeInput("1-A-0", command);
 
         BookingCompletedEvent completed = seatAllocationResultOutput.readValue();
         assertEquals("REJECTED", completed.getStatus());
@@ -46,7 +46,7 @@ class SectionStatusEmitterTest extends StreamProcessorTestBase {
     @Test
     void noStateInStore_shouldNotEmit() {
         BookingCommand command = buildBookingCommand("r1", 99L, "Z", 1, "user1");
-        seatAllocationRequestInput.pipeInput("99-Z", command);
+        seatAllocationRequestInput.pipeInput("99-Z-0", command);
 
         seatAllocationResultOutput.readValue();
 

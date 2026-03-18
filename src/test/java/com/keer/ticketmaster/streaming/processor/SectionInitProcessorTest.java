@@ -17,20 +17,23 @@ class SectionInitProcessorTest extends StreamProcessorTestBase {
         initSection(1L, "A", 2, 3);
 
         KeyValueStore<String, SectionSeatState> store = getSeatInventoryStore();
-        SectionSeatState state = store.get("1-A");
+        SectionSeatState state = store.get("1-A-0");
 
         assertNotNull(state);
         assertEquals(1L, state.getEventId());
         assertEquals("A", state.getSection());
+        assertEquals(0, state.getSubPartition());
         assertEquals(6, state.getAvailableCount());
+        assertEquals(6, state.getTotalSeats());
+        assertEquals(1, state.getSeatOffset());
 
-        List<String> seats = state.getAvailableSeats();
+        List<String> seats = getAvailableSeats(state);
         assertEquals(6, seats.size());
         assertEquals(List.of("A-1", "A-2", "A-3", "A-4", "A-5", "A-6"), seats);
 
         assertFalse(sectionStatusOutput.isEmpty());
         KeyValue<String, SectionStatusEvent> output = sectionStatusOutput.readKeyValue();
-        assertEquals("1-A", output.key);
+        assertEquals("1-A-0", output.key);
         assertEquals(1L, output.value.getEventId());
         assertEquals("A", output.value.getSection());
         assertEquals(6, output.value.getAvailableCount());
@@ -40,12 +43,12 @@ class SectionInitProcessorTest extends StreamProcessorTestBase {
     void initWithReservedSeats_shouldExcludeReservedAndReduceCount() {
         initSection(1L, "A", 2, 3, List.of("A-1", "A-2"));
 
-        SectionSeatState state = getSeatInventoryStore().get("1-A");
+        SectionSeatState state = getSeatInventoryStore().get("1-A-0");
 
         assertEquals(4, state.getAvailableCount());
-        assertFalse(state.getAvailableSeats().contains("A-1"));
-        assertFalse(state.getAvailableSeats().contains("A-2"));
-        assertTrue(state.getAvailableSeats().contains("A-3"));
+        assertFalse(isSeatAvailable(state, 1));
+        assertFalse(isSeatAvailable(state, 2));
+        assertTrue(isSeatAvailable(state, 3));
 
         SectionStatusEvent statusEvent = sectionStatusOutput.readValue();
         assertEquals(4, statusEvent.getAvailableCount());
@@ -58,34 +61,34 @@ class SectionInitProcessorTest extends StreamProcessorTestBase {
 
         initSection(1L, "A", 1, 2);
 
-        SectionSeatState state = getSeatInventoryStore().get("1-A");
+        SectionSeatState state = getSeatInventoryStore().get("1-A-0");
         assertEquals(2, state.getAvailableCount());
-        assertEquals(2, state.getAvailableSeats().size());
+        assertEquals(2, getAvailableSeats(state).size());
 
         SectionStatusEvent statusEvent = sectionStatusOutput.readValue();
         assertEquals(2, statusEvent.getAvailableCount());
     }
 
     @Test
-    void zeroSeats_shouldProduceEmptyList() {
+    void zeroSeats_shouldProduceEmptyBitmap() {
         initSection(1L, "A", 0, 5);
 
-        SectionSeatState state = getSeatInventoryStore().get("1-A");
+        SectionSeatState state = getSeatInventoryStore().get("1-A-0");
         assertNotNull(state);
         assertEquals(0, state.getAvailableCount());
-        assertTrue(state.getAvailableSeats().isEmpty());
+        assertEquals(0, state.getTotalSeats());
 
         SectionStatusEvent statusEvent = sectionStatusOutput.readValue();
         assertEquals(0, statusEvent.getAvailableCount());
     }
 
     @Test
-    void zeroSeatsPerRow_shouldProduceEmptyList() {
+    void zeroSeatsPerRow_shouldProduceEmptyBitmap() {
         initSection(1L, "A", 3, 0);
 
-        SectionSeatState state = getSeatInventoryStore().get("1-A");
+        SectionSeatState state = getSeatInventoryStore().get("1-A-0");
         assertNotNull(state);
         assertEquals(0, state.getAvailableCount());
-        assertTrue(state.getAvailableSeats().isEmpty());
+        assertEquals(0, state.getTotalSeats());
     }
 }

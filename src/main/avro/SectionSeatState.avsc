@@ -5,7 +5,11 @@
   "fields": [
     {"name": "eventId", "type": "long"},
     {"name": "section", "type": "string"},
-    {"name": "availableSeats", "type": {"type": "array", "items": "string"}},
+    {"name": "subPartition", "type": "int", "default": 0},
+    {"name": "totalSubPartitions", "type": "int", "default": 1},
+    {"name": "seatBitmap", "type": "bytes", "doc": "Bitmap: bit[i]=1 means seat at offset i is available"},
+    {"name": "totalSeats", "type": "int", "doc": "Total seats in this sub-partition"},
+    {"name": "seatOffset", "type": "int", "default": 1, "doc": "Global seat number offset for this sub-partition"},
     {"name": "availableCount", "type": "int"}
   ]
 }

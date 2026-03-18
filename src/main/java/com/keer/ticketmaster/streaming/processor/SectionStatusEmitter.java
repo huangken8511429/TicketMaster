@@ -3,6 +3,7 @@ package com.keer.ticketmaster.streaming.processor;
 import com.keer.ticketmaster.avro.BookingCompletedEvent;
 import com.keer.ticketmaster.avro.SectionSeatState;
 import com.keer.ticketmaster.config.StateStore;
+import com.keer.ticketmaster.config.StoreKeyUtil;
 import org.apache.kafka.streams.processor.api.Processor;
 import org.apache.kafka.streams.processor.api.ProcessorContext;
 import org.apache.kafka.streams.processor.api.Record;
@@ -23,7 +24,7 @@ public class SectionStatusEmitter
     @Override
     public void process(Record<String, BookingCompletedEvent> record) {
         BookingCompletedEvent event = record.value();
-        String storeKey = event.getEventId() + "-" + event.getSection();
+        String storeKey = StoreKeyUtil.seatKey(event.getEventId(), event.getSection(), event.getSubPartition());
 
         SectionSeatState state = seatStore.get(storeKey);
         if (state != null) {

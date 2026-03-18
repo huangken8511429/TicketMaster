@@ -24,14 +24,14 @@ class SeatAllocationProcessorTest extends StreamProcessorTestBase {
         assertEquals(3, event.getSeatCount());
         assertEquals(List.of("A-1", "A-2", "A-3"), event.getAllocatedSeats());
 
-        // Verify state store updated: allocated seats removed from available list
-        SectionSeatState state = getSeatInventoryStore().get("1-A");
+        // Verify state store updated: allocated seats removed from bitmap
+        SectionSeatState state = getSeatInventoryStore().get("1-A-0");
         assertEquals(2, state.getAvailableCount());
-        assertFalse(state.getAvailableSeats().contains("A-1"));
-        assertFalse(state.getAvailableSeats().contains("A-2"));
-        assertFalse(state.getAvailableSeats().contains("A-3"));
-        assertTrue(state.getAvailableSeats().contains("A-4"));
-        assertTrue(state.getAvailableSeats().contains("A-5"));
+        assertFalse(isSeatAvailable(state, 1));
+        assertFalse(isSeatAvailable(state, 2));
+        assertFalse(isSeatAvailable(state, 3));
+        assertTrue(isSeatAvailable(state, 4));
+        assertTrue(isSeatAvailable(state, 5));
     }
 
     @Test
@@ -72,7 +72,7 @@ class SeatAllocationProcessorTest extends StreamProcessorTestBase {
         assertEquals("CONFIRMED", event.getStatus());
         assertEquals(List.of("A-1", "A-2", "A-3"), event.getAllocatedSeats());
 
-        SectionSeatState state = getSeatInventoryStore().get("1-A");
+        SectionSeatState state = getSeatInventoryStore().get("1-A-0");
         assertEquals(0, state.getAvailableCount());
     }
 
@@ -105,14 +105,14 @@ class SeatAllocationProcessorTest extends StreamProcessorTestBase {
         BookingCompletedEvent e1 = seatAllocationResultOutput.readValue();
         assertEquals("CONFIRMED", e1.getStatus());
 
-        SectionSeatState state1 = getSeatInventoryStore().get("1-A");
+        SectionSeatState state1 = getSeatInventoryStore().get("1-A-0");
         assertEquals(3, state1.getAvailableCount());
 
         pipeAllocationRequest("r2", 1L, "A", 2, "user2");
         BookingCompletedEvent e2 = seatAllocationResultOutput.readValue();
         assertEquals("CONFIRMED", e2.getStatus());
 
-        SectionSeatState state2 = getSeatInventoryStore().get("1-A");
+        SectionSeatState state2 = getSeatInventoryStore().get("1-A-0");
         assertEquals(1, state2.getAvailableCount());
 
         pipeAllocationRequest("r3", 1L, "A", 2, "user3");
@@ -136,7 +136,7 @@ class SeatAllocationProcessorTest extends StreamProcessorTestBase {
     }
 
     private void pipeAllocationRequest(String bookingId, long eventId, String section, int seatCount, String userId) {
-        String key = eventId + "-" + section;
+        String key = eventId + "-" + section + "-0";
         BookingCommand command = buildBookingCommand(bookingId, eventId, section, seatCount, userId);
         seatAllocationRequestInput.pipeInput(key, command);
     }

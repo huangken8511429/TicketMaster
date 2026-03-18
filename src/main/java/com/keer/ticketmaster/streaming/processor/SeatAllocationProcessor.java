@@ -4,15 +4,25 @@ import com.keer.ticketmaster.avro.SectionSeatState;
 import com.keer.ticketmaster.avro.BookingCommand;
 import com.keer.ticketmaster.avro.BookingCompletedEvent;
 import com.keer.ticketmaster.config.StateStore;
+import com.keer.ticketmaster.config.StoreKeyUtil;
 import org.apache.kafka.streams.processor.api.Processor;
 import org.apache.kafka.streams.processor.api.ProcessorContext;
 import org.apache.kafka.streams.processor.api.Record;
 import org.apache.kafka.streams.state.KeyValueStore;
 
+import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Allocates consecutive seats using bitmap-based state store.
+ *
+ * Bitmap operations:
+ * - findConsecutiveBits(): O(n) scan for N consecutive set bits
+ * - clearBits(): mark allocated seats as taken
+ * - State size: ~63 bytes per 500 seats (vs ~100KB with List<String>)
+ */
 public class SeatAllocationProcessor
         implements Processor<String, BookingCommand, String, BookingCompletedEvent> {
 
@@ -33,33 +43,45 @@ public class SeatAllocationProcessor
         String section = command.getSection();
         int seatCount = command.getSeatCount();
         String userId = command.getUserId();
+        int subPartition = command.getTargetSubPartition();
 
-        String storeKey = eventId + "-" + section;
+        String storeKey = StoreKeyUtil.seatKey(eventId, section, subPartition);
         SectionSeatState sectionState = seatStore.get(storeKey);
 
         // Fast fail: no section data or not enough available seats
         if (sectionState == null || sectionState.getAvailableCount() < seatCount) {
-            context.forward(new Record<>(bookingId, buildRejected(bookingId, eventId, userId, section, seatCount), record.timestamp()));
+            context.forward(new Record<>(bookingId, buildRejected(command), record.timestamp()));
             return;
         }
 
-        // availableSeats is already sorted from init (by globalIndex order)
-        List<String> availableSeats = sectionState.getAvailableSeats();
-        int startIndex = findConsecutiveBlock(availableSeats, seatCount);
+        // Get bitmap as byte array
+        ByteBuffer bitmapBuffer = sectionState.getSeatBitmap();
+        byte[] bitmap = new byte[bitmapBuffer.remaining()];
+        bitmapBuffer.get(bitmap);
+        bitmapBuffer.rewind();
 
-        if (startIndex < 0) {
-            context.forward(new Record<>(bookingId, buildRejected(bookingId, eventId, userId, section, seatCount), record.timestamp()));
+        int totalSeats = sectionState.getTotalSeats();
+        int seatOffset = sectionState.getSeatOffset();
+
+        // Find consecutive available seats in bitmap
+        int startBit = findConsecutiveBits(bitmap, totalSeats, seatCount);
+
+        if (startBit < 0) {
+            context.forward(new Record<>(bookingId, buildRejected(command), record.timestamp()));
             return;
         }
 
-        // Extract allocated seats and build new available list without them
-        List<String> allocatedSeats = new ArrayList<>(availableSeats.subList(startIndex, startIndex + seatCount));
-        List<String> newAvailable = new ArrayList<>(availableSeats.size() - seatCount);
-        newAvailable.addAll(availableSeats.subList(0, startIndex));
-        newAvailable.addAll(availableSeats.subList(startIndex + seatCount, availableSeats.size()));
+        // Allocate: clear bits and build seat name list
+        List<String> allocatedSeats = new ArrayList<>(seatCount);
+        for (int i = startBit; i < startBit + seatCount; i++) {
+            bitmap[i / 8] &= (byte) ~(1 << (i % 8));
+            allocatedSeats.add(section + "-" + (seatOffset + i));
+        }
 
-        sectionState.setAvailableSeats(newAvailable);
-        sectionState.setAvailableCount(newAvailable.size());
+        // Update state
+        int newAvailableCount = sectionState.getAvailableCount() - seatCount;
+        sectionState.setSeatBitmap(ByteBuffer.wrap(bitmap));
+        sectionState.setAvailableCount(newAvailableCount);
         seatStore.put(storeKey, sectionState);
 
         BookingCompletedEvent result = BookingCompletedEvent.newBuilder()
@@ -69,6 +91,7 @@ public class SeatAllocationProcessor
                 .setStatus("CONFIRMED")
                 .setSection(section)
                 .setSeatCount(seatCount)
+                .setSubPartition(subPartition)
                 .setAllocatedSeats(allocatedSeats)
                 .setTimestamp(Instant.now().toEpochMilli())
                 .build();
@@ -77,44 +100,36 @@ public class SeatAllocationProcessor
     }
 
     /**
-     * Find a block of `seatCount` consecutive seats in the sorted available list.
-     * Returns the start index, or -1 if not found.
+     * Find a block of `count` consecutive set bits (available seats) in the bitmap.
+     * Returns the start bit index, or -1 if not found.
      */
-    private int findConsecutiveBlock(List<String> availableSeats, int seatCount) {
-        if (availableSeats.size() < seatCount) {
-            return -1;
-        }
+    private int findConsecutiveBits(byte[] bitmap, int totalSeats, int count) {
+        int consecutive = 0;
+        int start = -1;
 
-        for (int i = 0; i <= availableSeats.size() - seatCount; i++) {
-            boolean consecutive = true;
-            for (int j = 1; j < seatCount; j++) {
-                int prev = extractSeatNumber(availableSeats.get(i + j - 1));
-                int curr = extractSeatNumber(availableSeats.get(i + j));
-                if (curr - prev != 1) {
-                    consecutive = false;
-                    break;
-                }
-            }
-            if (consecutive) {
-                return i;
+        for (int i = 0; i < totalSeats; i++) {
+            boolean available = (bitmap[i / 8] & (1 << (i % 8))) != 0;
+
+            if (available) {
+                if (consecutive == 0) start = i;
+                consecutive++;
+                if (consecutive == count) return start;
+            } else {
+                consecutive = 0;
             }
         }
         return -1;
     }
 
-    private int extractSeatNumber(String seatName) {
-        int lastDash = seatName.lastIndexOf('-');
-        return Integer.parseInt(seatName.substring(lastDash + 1));
-    }
-
-    private BookingCompletedEvent buildRejected(String bookingId, long eventId, String userId, String section, int seatCount) {
+    private BookingCompletedEvent buildRejected(BookingCommand command) {
         return BookingCompletedEvent.newBuilder()
-                .setBookingId(bookingId)
-                .setEventId(eventId)
-                .setUserId(userId)
+                .setBookingId(command.getBookingId())
+                .setEventId(command.getEventId())
+                .setUserId(command.getUserId())
                 .setStatus("REJECTED")
-                .setSection(section)
-                .setSeatCount(seatCount)
+                .setSection(command.getSection())
+                .setSeatCount(command.getSeatCount())
+                .setSubPartition(command.getTargetSubPartition())
                 .setAllocatedSeats(List.of())
                 .setTimestamp(Instant.now().toEpochMilli())
                 .build();

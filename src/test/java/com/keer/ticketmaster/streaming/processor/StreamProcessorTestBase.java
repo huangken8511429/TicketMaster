@@ -3,6 +3,7 @@ package com.keer.ticketmaster.streaming.processor;
 import com.keer.ticketmaster.avro.*;
 import com.keer.ticketmaster.config.StateStore;
 import com.keer.ticketmaster.config.Topic;
+import com.keer.ticketmaster.streaming.SectionStatusMapper;
 import io.confluent.kafka.schemaregistry.client.MockSchemaRegistryClient;
 import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 import io.confluent.kafka.streams.serdes.avro.SpecificAvroSerde;
@@ -19,14 +20,15 @@ import org.apache.kafka.streams.state.Stores;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
 /**
- * Test base that mirrors the SeatProcessorTopology:
- * - section-init -> SectionInitProcessor -> section-status
- * - seat-allocation-requests -> SeatAllocationProcessor -> seat-allocation-results
- * - allocation results -> SectionStatusEmitter -> section-status
+ * Test base that mirrors the SeatProcessorTopology with bitmap-based state
+ * and sub-partition support.
  */
 public abstract class StreamProcessorTestBase {
 
@@ -59,34 +61,22 @@ public abstract class StreamProcessorTestBase {
                 );
         builder.addStateStore(seatStoreBuilder);
 
-        // Init path: section-init -> SectionInitProcessor -> section-status
+        // Init path: section-init → SectionInitProcessor → section-status
         builder.stream(Topic.SECTION_INIT, Consumed.with(Serdes.String(), sectionInitSerde))
                 .process(SectionInitProcessor::new, StateStore.SEAT_INVENTORY)
-                .mapValues((ValueMapper<SectionSeatState, SectionStatusEvent>) state ->
-                        SectionStatusEvent.newBuilder()
-                                .setEventId(state.getEventId())
-                                .setSection(state.getSection())
-                                .setAvailableCount(state.getAvailableCount())
-                                .setTimestamp(System.currentTimeMillis())
-                                .build())
+                .mapValues(SectionStatusMapper::toStatusEvent)
                 .to(Topic.SECTION_STATUS, Produced.with(Serdes.String(), statusEventSerde));
 
-        // Allocation path: seat-allocation-requests -> SeatAllocationProcessor -> seat-allocation-results
+        // Allocation path: seat-allocation-requests → SeatAllocationProcessor → seat-allocation-results
         var completedStream = builder.stream(Topic.SEAT_ALLOCATION_REQUESTS, Consumed.with(Serdes.String(), commandSerde))
                 .process(SeatAllocationProcessor::new, StateStore.SEAT_INVENTORY);
 
         completedStream.to(Topic.SEAT_ALLOCATION_RESULTS, Produced.with(Serdes.String(), completedSerde));
 
-        // Status update path: allocation results -> SectionStatusEmitter -> section-status
+        // Status update path: allocation results → SectionStatusEmitter → section-status
         completedStream
                 .process(SectionStatusEmitter::new, StateStore.SEAT_INVENTORY)
-                .mapValues((ValueMapper<SectionSeatState, SectionStatusEvent>) state ->
-                        SectionStatusEvent.newBuilder()
-                                .setEventId(state.getEventId())
-                                .setSection(state.getSection())
-                                .setAvailableCount(state.getAvailableCount())
-                                .setTimestamp(System.currentTimeMillis())
-                                .build())
+                .mapValues(SectionStatusMapper::toStatusEvent)
                 .to(Topic.SECTION_STATUS, Produced.with(Serdes.String(), statusEventSerde));
 
         Topology topology = builder.build();
@@ -136,16 +126,17 @@ public abstract class StreamProcessorTestBase {
     }
 
     protected void initSection(long eventId, String section, int rows, int seatsPerRow) {
-        initSection(eventId, section, rows, seatsPerRow, java.util.List.of());
+        initSection(eventId, section, rows, seatsPerRow, List.of());
     }
 
-    protected void initSection(long eventId, String section, int rows, int seatsPerRow, java.util.List<String> initialReserved) {
+    protected void initSection(long eventId, String section, int rows, int seatsPerRow, List<String> initialReserved) {
         String key = eventId + "-" + section;
         SectionInitCommand command = SectionInitCommand.newBuilder()
                 .setEventId(eventId)
                 .setSection(section)
                 .setRows(rows)
                 .setSeatsPerRow(seatsPerRow)
+                .setSubPartitions(1)
                 .setInitialReserved(initialReserved)
                 .build();
         sectionInitInput.pipeInput(key, command);
@@ -158,8 +149,39 @@ public abstract class StreamProcessorTestBase {
                 .setSection(section)
                 .setSeatCount(seatCount)
                 .setUserId(userId)
+                .setTargetSubPartition(0)
                 .setTimestamp(System.currentTimeMillis())
                 .build();
+    }
+
+    /**
+     * Check if a seat is available in the bitmap-based state.
+     */
+    protected boolean isSeatAvailable(SectionSeatState state, int seatIndex) {
+        ByteBuffer buffer = state.getSeatBitmap();
+        byte[] bitmap = new byte[buffer.remaining()];
+        buffer.get(bitmap);
+        buffer.rewind();
+        int localIndex = seatIndex - state.getSeatOffset();
+        if (localIndex < 0 || localIndex >= state.getTotalSeats()) return false;
+        return (bitmap[localIndex / 8] & (1 << (localIndex % 8))) != 0;
+    }
+
+    /**
+     * Get list of available seat names from bitmap state.
+     */
+    protected List<String> getAvailableSeats(SectionSeatState state) {
+        ByteBuffer buffer = state.getSeatBitmap();
+        byte[] bitmap = new byte[buffer.remaining()];
+        buffer.get(bitmap);
+        buffer.rewind();
+        List<String> seats = new ArrayList<>();
+        for (int i = 0; i < state.getTotalSeats(); i++) {
+            if ((bitmap[i / 8] & (1 << (i % 8))) != 0) {
+                seats.add(state.getSection() + "-" + (state.getSeatOffset() + i));
+            }
+        }
+        return seats;
     }
 
     private <T extends org.apache.avro.specific.SpecificRecord> SpecificAvroSerde<T> newAvroSerde(

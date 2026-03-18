@@ -3,6 +3,7 @@ package com.keer.ticketmaster.streaming.topology;
 import com.keer.ticketmaster.avro.*;
 import com.keer.ticketmaster.config.StateStore;
 import com.keer.ticketmaster.config.Topic;
+import com.keer.ticketmaster.streaming.SectionStatusMapper;
 import com.keer.ticketmaster.streaming.processor.SeatAllocationProcessor;
 import com.keer.ticketmaster.streaming.processor.SectionInitProcessor;
 import com.keer.ticketmaster.streaming.processor.SectionStatusEmitter;
@@ -23,17 +24,17 @@ import org.springframework.context.annotation.Profile;
 import java.util.Map;
 
 /**
- * Seat Processor (tm-seat) topology.
+ * Seat Processor (tm-seat) topology with bitmap-based state and sub-partition support.
  *
  * Consumes:
- *   - section-init          (key=eventId-section) → SectionInitProcessor → section-status
- *   - seat-allocation-requests (key=eventId-section) → SeatAllocationProcessor → seat-allocation-results
+ *   - section-init               (key=eventId-section) → SectionInitProcessor → section-status
+ *   - seat-allocation-requests   (key=eventId-section-subPartition) → SeatAllocationProcessor → results
  *
  * Produces:
  *   - seat-allocation-results (key=bookingId)
- *   - section-status          (key=eventId-section)
+ *   - section-status          (key=eventId-section-subPartition)
  *
- * State store: seat-inventory-store (RocksDB)
+ * State store: seat-inventory-store (RocksDB, bitmap-based)
  */
 @Configuration
 @Profile("seat-processor")
@@ -53,7 +54,7 @@ public class SeatProcessorTopology {
         SpecificAvroSerde<SectionSeatState> seatStateSerde = newAvroSerde(serdeConfig);
         SpecificAvroSerde<SectionStatusEvent> statusEventSerde = newAvroSerde(serdeConfig);
 
-        // State store for seat inventory
+        // State store for seat inventory (bitmap-based)
         StoreBuilder<KeyValueStore<String, SectionSeatState>> seatStoreBuilder =
                 Stores.keyValueStoreBuilder(
                         Stores.persistentKeyValueStore(StateStore.SEAT_INVENTORY),
@@ -62,36 +63,23 @@ public class SeatProcessorTopology {
                 );
         builder.addStateStore(seatStoreBuilder);
 
-        // --- Init path: section-init -> SectionInitProcessor -> section-status ---
+        // --- Init path: section-init → SectionInitProcessor → section-status ---
         builder.stream(Topic.SECTION_INIT, Consumed.with(Serdes.String(), sectionInitSerde))
                 .process(SectionInitProcessor::new, StateStore.SEAT_INVENTORY)
-                .mapValues((ValueMapper<SectionSeatState, SectionStatusEvent>) state ->
-                        SectionStatusEvent.newBuilder()
-                                .setEventId(state.getEventId())
-                                .setSection(state.getSection())
-                                .setAvailableCount(state.getAvailableCount())
-                                .setTimestamp(System.currentTimeMillis())
-                                .build())
+                .mapValues(SectionStatusMapper::toStatusEvent)
                 .to(Topic.SECTION_STATUS, Produced.with(Serdes.String(), statusEventSerde));
 
-        // --- Allocation path: seat-allocation-requests -> SeatAllocationProcessor -> seat-allocation-results ---
+        // --- Allocation path: seat-allocation-requests → SeatAllocationProcessor → results ---
         var completedStream = builder.stream(Topic.SEAT_ALLOCATION_REQUESTS, Consumed.with(Serdes.String(), commandSerde))
                 .process(SeatAllocationProcessor::new, StateStore.SEAT_INVENTORY);
 
         completedStream.to(Topic.SEAT_ALLOCATION_RESULTS, Produced.with(Serdes.String(), completedSerde));
 
-        // --- Status update path: allocation results -> SectionStatusEmitter -> section-status ---
+        // --- Status update: allocation results → SectionStatusEmitter → section-status ---
         completedStream
                 .process(SectionStatusEmitter::new, StateStore.SEAT_INVENTORY)
-                .mapValues((ValueMapper<SectionSeatState, SectionStatusEvent>) state ->
-                        SectionStatusEvent.newBuilder()
-                                .setEventId(state.getEventId())
-                                .setSection(state.getSection())
-                                .setAvailableCount(state.getAvailableCount())
-                                .setTimestamp(System.currentTimeMillis())
-                                .build())
+                .mapValues(SectionStatusMapper::toStatusEvent)
                 .to(Topic.SECTION_STATUS, Produced.with(Serdes.String(), statusEventSerde));
-
     }
 
     private static <T extends org.apache.avro.specific.SpecificRecord> SpecificAvroSerde<T> newAvroSerde(

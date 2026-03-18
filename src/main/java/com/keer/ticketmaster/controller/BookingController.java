@@ -24,6 +24,11 @@ public class BookingController {
     @PostMapping("/api/bookings")
     public ResponseEntity<Map<String, String>> createBooking(@RequestBody BookingRequest request) {
         String bookingId = bookingService.createBooking(request);
+        if (bookingId == null) {
+            // Rejected at API level — no seats available (Redis pre-filter)
+            return ResponseEntity.unprocessableEntity()
+                    .body(Map.of("error", "No seats available"));
+        }
         return ResponseEntity.accepted()
                 .body(Map.of("bookingId", bookingId));
     }

@@ -9,6 +9,7 @@
     {"name": "status", "type": "string"},
     {"name": "section", "type": "string", "default": ""},
     {"name": "seatCount", "type": "int", "default": 0},
+    {"name": "subPartition", "type": "int", "default": 0},
     {"name": "allocatedSeats", "type": {"type": "array", "items": "string"}},
     {"name": "timestamp", "type": "long", "logicalType": "timestamp-millis"}
   ]

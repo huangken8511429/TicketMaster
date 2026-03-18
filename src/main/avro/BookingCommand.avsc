@@ -8,6 +8,7 @@
     {"name": "section", "type": "string"},
     {"name": "seatCount", "type": "int"},
     {"name": "userId", "type": "string"},
+    {"name": "targetSubPartition", "type": "int", "default": 0},
     {"name": "timestamp", "type": "long", "logicalType": "timestamp-millis"}
   ]
 }
