@@ -22,17 +22,15 @@ public class BookingController {
     private final BookingService bookingService;
 
     @PostMapping("/api/bookings")
-    public DeferredResult<ResponseEntity<BookingResponse>> createBooking(@RequestBody BookingRequest request) {
-        return bookingService.createBooking(request);
+    public ResponseEntity<Map<String, String>> createBooking(@RequestBody BookingRequest request) {
+        String bookingId = bookingService.createBooking(request);
+        return ResponseEntity.accepted()
+                .body(Map.of("bookingId", bookingId));
     }
 
     @GetMapping("/api/bookings/{bookingId}")
-    public ResponseEntity<BookingResponse> getBooking(@PathVariable String bookingId) {
-        BookingResponse response = bookingService.queryBooking(bookingId);
-        if (response == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok(response);
+    public DeferredResult<ResponseEntity<BookingResponse>> getBooking(@PathVariable String bookingId) {
+        return bookingService.getBookingAsync(bookingId);
     }
 
     @ExceptionHandler(StoreNotReadyException.class)

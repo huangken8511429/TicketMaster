@@ -114,6 +114,7 @@ public class EventService {
                 .venueName(event.getVenue().getName())
                 .performerName(event.getPerformer() != null ? event.getPerformer().getName() : null)
                 .totalSeats(totalSeats)
+                .sectionCount(event.getSections() != null ? event.getSections().size() : 0)
                 .build();
     }
 }

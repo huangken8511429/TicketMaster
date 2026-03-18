@@ -36,7 +36,7 @@ import java.util.Map;
  * State store: seat-inventory-store (RocksDB)
  */
 @Configuration
-@Profile({"seat-processor", "default"})
+@Profile("seat-processor")
 public class SeatProcessorTopology {
 
     @Value("${spring.kafka.streams.properties[schema.registry.url]}")

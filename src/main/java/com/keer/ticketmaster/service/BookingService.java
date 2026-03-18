@@ -25,34 +25,16 @@ import java.util.UUID;
 @Slf4j
 public class BookingService {
 
-    private static final long ASYNC_TIMEOUT_MS = 10_000;
+    private static final long POLL_TIMEOUT_MS = 10_000;
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final InteractiveQueryService interactiveQueryService;
     private final BookingPendingRequests pendingRequests;
     private final RestClient restClient;
 
-    /**
-     * Send booking command to Kafka and return DeferredResult that resolves
-     * when the Kafka Streams topology processes the result.
-     * Single round-trip: POST blocks until result is ready.
-     */
-    public DeferredResult<ResponseEntity<BookingResponse>> createBooking(BookingRequest request) {
+    public String createBooking(BookingRequest request) {
         String bookingId = UUID.randomUUID().toString();
 
-        DeferredResult<ResponseEntity<BookingResponse>> deferred = new DeferredResult<>(ASYNC_TIMEOUT_MS);
-
-        // Register DeferredResult BEFORE sending to Kafka to avoid race condition
-        HostInfo keyOwner = interactiveQueryService.getKeyOwner(bookingId);
-
-        if (keyOwner == null || interactiveQueryService.isLocal(keyOwner)) {
-            pendingRequests.register(bookingId, deferred);
-        } else {
-            // Result will arrive on another pod — forward long-poll after sending command
-            deferForwardToOwner(keyOwner, bookingId, deferred);
-        }
-
-        // Send command to Kafka
         BookingCommand command = BookingCommand.newBuilder()
                 .setBookingId(bookingId)
                 .setEventId(request.getEventId())
@@ -64,12 +46,45 @@ public class BookingService {
 
         kafkaTemplate.send(Topic.BOOKING_COMMANDS, bookingId, command);
 
+        return bookingId;
+    }
+
+    /**
+     * Long-polling: check state store first, if not ready, wait for Kafka Streams
+     * to process the result via BookingPendingRequests.
+     */
+    public DeferredResult<ResponseEntity<BookingResponse>> getBookingAsync(String bookingId) {
+        DeferredResult<ResponseEntity<BookingResponse>> deferred = new DeferredResult<>(POLL_TIMEOUT_MS);
+
+        HostInfo keyOwner = interactiveQueryService.getKeyOwner(bookingId);
+
+        if (keyOwner != null && !interactiveQueryService.isLocal(keyOwner)) {
+            // Result partition is on another pod — forward long-poll
+            forwardToRemote(keyOwner, bookingId, deferred);
+            return deferred;
+        }
+
+        // Check state store — result may already be there
+        BookingResponse existing = queryLocal(bookingId);
+        if (existing != null) {
+            deferred.setResult(ResponseEntity.ok(existing));
+            return deferred;
+        }
+
+        // Not ready yet — register for notification
+        pendingRequests.register(bookingId, deferred);
+
+        // Double-check after registration to prevent race condition
+        existing = queryLocal(bookingId);
+        if (existing != null) {
+            deferred.setResult(ResponseEntity.ok(existing));
+        }
+
         return deferred;
     }
 
     /**
-     * Synchronous read from state store via Interactive Query.
-     * Used by GET endpoint — returns instantly, no long-polling.
+     * Synchronous read from state store (used by internal forwarding).
      */
     public BookingResponse queryBooking(String bookingId) {
         try {
@@ -85,7 +100,7 @@ public class BookingService {
      * Used by InternalBookingController for inter-pod forwarding.
      */
     public void waitLocally(String bookingId, DeferredResult<ResponseEntity<BookingResponse>> deferred) {
-        BookingResponse response = queryBooking(bookingId);
+        BookingResponse response = queryLocal(bookingId);
         if (response != null) {
             deferred.setResult(ResponseEntity.ok(response));
             return;
@@ -94,14 +109,22 @@ public class BookingService {
         pendingRequests.register(bookingId, deferred);
 
         // Double-check: result may have arrived between the store read and registration
-        response = queryBooking(bookingId);
+        response = queryLocal(bookingId);
         if (response != null) {
             deferred.setResult(ResponseEntity.ok(response));
         }
     }
 
-    private void deferForwardToOwner(HostInfo owner, String bookingId,
-                                     DeferredResult<ResponseEntity<BookingResponse>> deferred) {
+    private BookingResponse queryLocal(String bookingId) {
+        try {
+            return interactiveQueryService.queryBooking(bookingId);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void forwardToRemote(HostInfo owner, String bookingId,
+                                  DeferredResult<ResponseEntity<BookingResponse>> deferred) {
         String url = "http://%s:%d/internal/bookings/%s".formatted(
                 owner.host(), owner.port(), bookingId);
 

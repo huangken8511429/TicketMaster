@@ -34,7 +34,7 @@ import java.util.Map;
  * State store: section-status-store (GlobalKTable, read-only)
  */
 @Configuration
-@Profile({"reservation-processor", "default"})
+@Profile("reservation-processor")
 public class BookingRouterTopology {
 
     private static final int MAX_LRU_ENTRIES = 1000;

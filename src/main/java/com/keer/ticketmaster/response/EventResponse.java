@@ -30,4 +30,6 @@ public class EventResponse {
     private String performerName;
 
     private Integer totalSeats;
+
+    private Integer sectionCount;
 }
