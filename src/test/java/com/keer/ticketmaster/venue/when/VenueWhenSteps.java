@@ -39,6 +39,19 @@ public class VenueWhenSteps {
         scenarioContext.setLastResponse(result);
     }
 
+    @當("^我建立一個場館，名稱為「(.+)」，地址為「(.+)」，座位圖為「(.+)」$")
+    public void 我建立一個場館含座位圖(String name, String address, String seatMap) throws Exception {
+        VenueRequest request = new VenueRequest(name, address, seatMap);
+
+        MvcResult result = mockMvc.perform(
+                post("/api/venues")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andReturn();
+
+        scenarioContext.setLastResponse(result);
+    }
+
     @當("我按 ID 查詢場館")
     public void 我按ID查詢場館() throws Exception {
         // 獲取最後創建的場館 ID，或從場館表中獲取第一個

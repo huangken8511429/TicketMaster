@@ -1,6 +1,7 @@
 package com.keer.ticketmaster;
 
 import com.keer.ticketmaster.repository.EventRepository;
+import com.keer.ticketmaster.repository.PerformerRepository;
 import com.keer.ticketmaster.repository.TicketRepository;
 import com.keer.ticketmaster.repository.VenueRepository;
 import io.cucumber.java.Before;
@@ -21,6 +22,9 @@ public class CucumberHooks {
     private VenueRepository venueRepository;
 
     @Autowired
+    private PerformerRepository performerRepository;
+
+    @Autowired
     private ScenarioContext scenarioContext;
 
     @Before
@@ -29,6 +33,7 @@ public class CucumberHooks {
         ticketRepository.deleteAll();
         eventRepository.deleteAll();
         venueRepository.deleteAll();
+        performerRepository.deleteAll();
         scenarioContext.clear();
     }
 }

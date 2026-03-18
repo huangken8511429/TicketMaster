@@ -41,6 +41,16 @@ public class VenueGivenSteps {
         scenarioContext.set("createdVenueId", saved.getId());
     }
 
+    @假如("^系統中已存在一個場館，名稱為「(.+)」，地址為「(.+)」，座位圖為「(.+)」$")
+    public void 系統中已存在一個場館含座位圖(String name, String address, String seatMap) {
+        Venue venue = new Venue();
+        venue.setName(name);
+        venue.setLocation(address);
+        venue.setSeatMap(seatMap);
+        Venue saved = venueRepository.save(venue);
+        scenarioContext.set("createdVenueId", saved.getId());
+    }
+
     @假如("系統中已存在以下場館:")
     public void 系統中已存在以下場館(DataTable dataTable) {
         List<Map<String, String>> rows = dataTable.asMaps(String.class, String.class);
@@ -48,6 +58,7 @@ public class VenueGivenSteps {
             Venue venue = new Venue();
             venue.setName(row.get("name"));
             venue.setLocation(row.get("location") != null ? row.get("location") : row.get("address"));
+            venue.setSeatMap(row.get("seatMap"));
             venueRepository.save(venue);
         }
     }

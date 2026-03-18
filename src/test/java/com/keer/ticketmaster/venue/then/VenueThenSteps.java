@@ -42,6 +42,25 @@ public class VenueThenSteps {
         }
     }
 
+    @那麼("^場館資訊包含名稱「(.+)」、地址「(.+)」、座位圖「(.+)」$")
+    public void 場館資訊包含名稱地址座位圖(String expectedName, String expectedAddress, String expectedSeatMap) throws Exception {
+        MvcResult result = scenarioContext.getLastResponse();
+        assertNotNull(result, "應該有前一個HTTP回應");
+
+        String responseBody = result.getResponse().getContentAsString();
+        responseBody = responseBody.trim();
+        if (responseBody.startsWith("[")) {
+            CollectionType listType = objectMapper.getTypeFactory()
+                    .constructCollectionType(List.class, VenueResponse.class);
+            List<VenueResponse> venues = objectMapper.readValue(responseBody, listType);
+            assertFalse(venues.isEmpty(), "場館列表不應為空");
+            validateVenueWithSeatMap(venues.get(0), expectedName, expectedAddress, expectedSeatMap);
+        } else {
+            VenueResponse response = objectMapper.readValue(responseBody, VenueResponse.class);
+            validateVenueWithSeatMap(response, expectedName, expectedAddress, expectedSeatMap);
+        }
+    }
+
     @那麼("^系統應該回傳 (\\d+) 個場館$")
     public void 系統應該回傳N個場館(int expectedCount) throws Exception {
         MvcResult result = scenarioContext.getLastResponse();
@@ -62,5 +81,12 @@ public class VenueThenSteps {
                 "場館名稱應為 " + expectedName);
         assertEquals(expectedLocation, response.getLocation(),
                 "場館地點應為 " + expectedLocation);
+    }
+
+    private void validateVenueWithSeatMap(VenueResponse response, String expectedName,
+                                           String expectedLocation, String expectedSeatMap) {
+        validateVenue(response, expectedName, expectedLocation);
+        assertEquals(expectedSeatMap, response.getSeatMap(),
+                "場館座位圖應為 " + expectedSeatMap);
     }
 }
