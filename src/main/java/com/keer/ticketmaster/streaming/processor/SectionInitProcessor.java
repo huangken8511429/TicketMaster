@@ -3,7 +3,6 @@ package com.keer.ticketmaster.streaming.processor;
 import com.keer.ticketmaster.avro.SectionInitCommand;
 import com.keer.ticketmaster.avro.SectionSeatState;
 import com.keer.ticketmaster.config.StateStore;
-import com.keer.ticketmaster.config.StoreKeyUtil;
 import org.apache.kafka.streams.processor.api.Processor;
 import org.apache.kafka.streams.processor.api.ProcessorContext;
 import org.apache.kafka.streams.processor.api.Record;
@@ -14,9 +13,12 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Initializes seat inventory for event sections using bitmap storage.
- * Supports sub-partitioning: splits a section into N independent sub-partitions,
- * each managing its own seat range for parallel processing.
+ * Initializes seat inventory for a SINGLE sub-partition using bitmap storage.
+ *
+ * Each init command creates one sub-partition's state. The sub-partition index
+ * is extracted from the record key (format: eventId-section-sp). The caller
+ * sends one init command per sub-partition with matching keys to ensure
+ * co-partitioning with booking allocation requests.
  */
 public class SectionInitProcessor
         implements Processor<String, SectionInitCommand, String, SectionSeatState> {
@@ -41,47 +43,51 @@ public class SectionInitProcessor
 
         Set<String> reserved = new HashSet<>(command.getInitialReserved());
 
+        // Extract sub-partition index from record key (format: eventId-section-sp)
+        String storeKey = record.key();
+        int sp = extractSubPartition(storeKey);
+
         int totalSeats = rows * seatsPerRow;
         int seatsPerSubPartition = totalSeats / subPartitions;
         int remainder = totalSeats % subPartitions;
 
-        int globalOffset = 1;
-
-        for (int sp = 0; sp < subPartitions; sp++) {
-            // Last sub-partition gets the remainder seats
-            int subPartSeats = seatsPerSubPartition + (sp < remainder ? 1 : 0);
-            int seatOffset = globalOffset;
-
-            // Create bitmap: bit[i]=1 means seat at (seatOffset + i) is available
-            int bitmapBytes = (subPartSeats + 7) / 8;
-            byte[] bitmap = new byte[bitmapBytes];
-            int availableCount = 0;
-
-            for (int i = 0; i < subPartSeats; i++) {
-                String seatName = section + "-" + (seatOffset + i);
-                if (!reserved.contains(seatName)) {
-                    // Set bit i to 1 (available)
-                    bitmap[i / 8] |= (byte) (1 << (i % 8));
-                    availableCount++;
-                }
-            }
-
-            String storeKey = StoreKeyUtil.seatKey(eventId, section, sp);
-            SectionSeatState state = SectionSeatState.newBuilder()
-                    .setEventId(eventId)
-                    .setSection(section)
-                    .setSubPartition(sp)
-                    .setTotalSubPartitions(subPartitions)
-                    .setSeatBitmap(ByteBuffer.wrap(bitmap))
-                    .setTotalSeats(subPartSeats)
-                    .setSeatOffset(seatOffset)
-                    .setAvailableCount(availableCount)
-                    .build();
-
-            seatStore.put(storeKey, state);
-            context.forward(new Record<>(storeKey, state, record.timestamp()));
-
-            globalOffset += subPartSeats;
+        // Calculate this sub-partition's seat range
+        int seatOffset = 1;
+        for (int i = 0; i < sp; i++) {
+            seatOffset += seatsPerSubPartition + (i < remainder ? 1 : 0);
         }
+        int subPartSeats = seatsPerSubPartition + (sp < remainder ? 1 : 0);
+
+        // Create bitmap: bit[i]=1 means seat at (seatOffset + i) is available
+        int bitmapBytes = (subPartSeats + 7) / 8;
+        byte[] bitmap = new byte[bitmapBytes];
+        int availableCount = 0;
+
+        for (int i = 0; i < subPartSeats; i++) {
+            String seatName = section + "-" + (seatOffset + i);
+            if (!reserved.contains(seatName)) {
+                bitmap[i / 8] |= (byte) (1 << (i % 8));
+                availableCount++;
+            }
+        }
+
+        SectionSeatState state = SectionSeatState.newBuilder()
+                .setEventId(eventId)
+                .setSection(section)
+                .setSubPartition(sp)
+                .setTotalSubPartitions(subPartitions)
+                .setSeatBitmap(ByteBuffer.wrap(bitmap))
+                .setTotalSeats(subPartSeats)
+                .setSeatOffset(seatOffset)
+                .setAvailableCount(availableCount)
+                .build();
+
+        seatStore.put(storeKey, state);
+        context.forward(new Record<>(storeKey, state, record.timestamp()));
+    }
+
+    private int extractSubPartition(String key) {
+        int lastDash = key.lastIndexOf('-');
+        return Integer.parseInt(key.substring(lastDash + 1));
     }
 }

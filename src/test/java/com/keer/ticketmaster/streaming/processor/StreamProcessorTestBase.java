@@ -130,7 +130,8 @@ public abstract class StreamProcessorTestBase {
     }
 
     protected void initSection(long eventId, String section, int rows, int seatsPerRow, List<String> initialReserved) {
-        String key = eventId + "-" + section;
+        // Key must match allocation key format: eventId-section-subPartition
+        String key = eventId + "-" + section + "-0";
         SectionInitCommand command = SectionInitCommand.newBuilder()
                 .setEventId(eventId)
                 .setSection(section)
