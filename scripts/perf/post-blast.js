@@ -12,8 +12,8 @@ export const options = {
     scenarios: {
         post_blast: {
             executor: 'constant-vus',
-            vus: 200,
-            duration: '15s',
+            vus: parseInt(__ENV.VUS || '200'),
+            duration: __ENV.DURATION || '15s',
         },
     },
 };

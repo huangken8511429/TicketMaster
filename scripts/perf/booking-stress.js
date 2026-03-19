@@ -7,23 +7,24 @@ const bookingSuccess = new Counter('booking_success');
 const bookingRejected = new Counter('booking_rejected');
 const bookingTimeout = new Counter('booking_timeout');
 const bookingError = new Counter('booking_error');
+const apiRejected = new Counter('api_rejected');  // Redis pre-filter rejection
 const successRate = new Rate('booking_success_rate');
 const postDuration = new Trend('post_duration', true);
 const pollDuration = new Trend('poll_duration', true);
 const e2eDuration = new Trend('e2e_duration', true);
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
-const POLL_INTERVAL_MS = 100;  // ms between poll attempts
-const MAX_POLL_ATTEMPTS = 100;  // 10s total timeout
+const VUS = parseInt(__ENV.VUS || '50');
+const ITERATIONS = parseInt(__ENV.ITERATIONS || '1000');
+const SUB_PARTITIONS = parseInt(__ENV.SUB_PARTITIONS || '1');
 
-// 1000 requests, 50 concurrent users
 export const options = {
     scenarios: {
         booking_rush: {
             executor: 'shared-iterations',
-            vus: 50,
-            iterations: 1000,
-            maxDuration: '5m',
+            vus: VUS,
+            iterations: ITERATIONS,
+            maxDuration: '15m',
         },
     },
     thresholds: {
@@ -31,12 +32,12 @@ export const options = {
     },
 };
 
-// Setup: Create venue + event + sections
+// Setup: Create venue + event + init sections via admin API
 export function setup() {
     console.log('=== Setting up test data ===');
 
     const venueRes = http.post(`${BASE_URL}/api/venues`, JSON.stringify({
-        name: 'Load Test Arena',
+        name: 'Stress Test Arena',
         location: 'Test Location',
         seatMap: 'standard-arena',
     }), { headers: { 'Content-Type': 'application/json' } });
@@ -45,75 +46,66 @@ export function setup() {
     const venue = venueRes.json();
     console.log(`Venue created: id=${venue.id}`);
 
-    const performerRes = http.post(`${BASE_URL}/api/performers`, JSON.stringify({
-        name: 'Load Test Band',
-        description: 'Stress test performer',
-    }), { headers: { 'Content-Type': 'application/json' } });
-
-    let performerId = null;
-    if (performerRes.status === 201) {
-        performerId = performerRes.json().id;
-        console.log(`Performer created: id=${performerId}`);
-    }
-
-    const sections = [];
-    const sectionNames = ['A', 'B', 'C', 'D', 'E'];
-    for (const name of sectionNames) {
-        sections.push({ name: name, rows: 20, seatsPerRow: 25 });
-    }
-
     const eventRes = http.post(`${BASE_URL}/api/events`, JSON.stringify({
         name: 'Stress Test Concert',
-        description: 'Load test event for 1000 booking requests',
+        description: 'Load test event',
         eventStartTime: '2026-12-31T19:00:00',
         eventEndTime: '2026-12-31T22:00:00',
         venueId: venue.id,
-        performerId: performerId,
-        sections: sections,
     }), { headers: { 'Content-Type': 'application/json' } });
 
     check(eventRes, { 'event created': (r) => r.status === 201 });
     const event = eventRes.json();
-    console.log(`Event created: id=${event.id}, sections=${sectionNames.length}, total seats=2500`);
+    console.log(`Event created: id=${event.id}`);
 
-    console.log('Waiting 20s for Kafka Streams section-init processing...');
-    sleep(20);
+    // Init sections via admin API (Kafka Streams state store)
+    const sectionNames = (__ENV.SECTIONS || 'A,B,C,D,E').split(',');
+    const rows = parseInt(__ENV.ROWS || '20');
+    const seatsPerRow = parseInt(__ENV.SEATS_PER_ROW || '25');
+    const totalSeatsPerSection = rows * seatsPerRow;
+
+    for (const name of sectionNames) {
+        const initRes = http.post(
+            `${BASE_URL}/admin/sections/init?eventId=${event.id}&section=${name}&rows=${rows}&seatsPerRow=${seatsPerRow}&subPartitions=${SUB_PARTITIONS}`,
+            null, { timeout: '10s' }
+        );
+        check(initRes, { [`section ${name} init`]: (r) => r.status === 200 });
+    }
+
+    const totalSeats = sectionNames.length * totalSeatsPerSection;
+    console.log(`Sections initialized: ${sectionNames.length} x ${totalSeatsPerSection} = ${totalSeats} seats (subPartitions=${SUB_PARTITIONS})`);
+
+    console.log('Waiting 10s for Kafka Streams to process section-init...');
+    sleep(10);
 
     // Smoke test
-    console.log('Smoke test: fire-and-forget POST...');
-    const smokePost = http.post(`${BASE_URL}/api/bookings`, JSON.stringify({
-        eventId: event.id, section: 'A', seatCount: 1, userId: 'smoke-test-user',
+    console.log('Running smoke test...');
+    const smokeRes = http.post(`${BASE_URL}/api/bookings`, JSON.stringify({
+        eventId: event.id, section: 'A', seatCount: 1, userId: 'smoke-user',
     }), { headers: { 'Content-Type': 'application/json' }, timeout: '5s' });
-    console.log(`Smoke POST: status=${smokePost.status}, body=${smokePost.body}`);
 
-    if (smokePost.status === 202) {
-        const bookingId = smokePost.json().bookingId;
-        console.log(`Smoke test bookingId: ${bookingId}, polling for result...`);
-
-        let resolved = false;
-        for (let i = 0; i < 50; i++) {
-            sleep(0.2);
-            const pollRes = http.get(`${BASE_URL}/api/bookings/${bookingId}`, { timeout: '5s' });
-            if (pollRes.status === 200) {
-                const body = pollRes.json();
-                console.log(`Smoke poll result: status=${body.status}, seats=${JSON.stringify(body.allocatedSeats)}`);
-                resolved = true;
-                break;
-            }
+    if (smokeRes.status === 202) {
+        const bid = smokeRes.json().bookingId;
+        sleep(5);
+        const pollRes = http.get(`${BASE_URL}/api/bookings/${bid}`, { timeout: '10s' });
+        if (pollRes.status === 200) {
+            const body = pollRes.json();
+            console.log(`Smoke test: ${body.status}, seats=${JSON.stringify(body.allocatedSeats)}`);
+        } else {
+            console.log(`WARNING: Smoke test poll failed: status=${pollRes.status}`);
         }
-        if (!resolved) {
-            console.log('WARNING: Smoke test did not resolve within 10s. Waiting 15 more seconds...');
-            sleep(15);
-        }
+    } else {
+        console.log(`WARNING: Smoke test POST returned ${smokeRes.status}: ${smokeRes.body}`);
     }
 
     return {
         eventId: event.id,
         sections: sectionNames,
+        totalSeats: totalSeats,
     };
 }
 
-// Main test: fire-and-forget POST + poll GET
+// Main test: POST booking + poll GET
 export default function (data) {
     const section = data.sections[Math.floor(Math.random() * data.sections.length)];
     const seatCount = Math.random() < 0.7 ? 2 : 1;
@@ -128,13 +120,22 @@ export default function (data) {
 
     const e2eStart = Date.now();
 
-    // Step 1: Fire-and-forget POST
+    // Step 1: POST booking
     const postStart = Date.now();
     const postRes = http.post(`${BASE_URL}/api/bookings`, payload, {
         headers: { 'Content-Type': 'application/json' },
         timeout: '5s',
     });
     postDuration.add(Date.now() - postStart);
+
+    // Handle Redis pre-filter rejection (422)
+    if (postRes.status === 422) {
+        apiRejected.add(1);
+        bookingRejected.add(1);
+        successRate.add(true);  // Pre-filter rejection is expected behavior
+        e2eDuration.add(Date.now() - e2eStart);
+        return;
+    }
 
     if (postRes.status !== 202) {
         bookingError.add(1);
@@ -150,7 +151,6 @@ export default function (data) {
         timeout: '12s',
     });
     pollDuration.add(Date.now() - pollStart);
-
     e2eDuration.add(Date.now() - e2eStart);
 
     if (pollRes.status === 200) {
@@ -172,10 +172,10 @@ export default function (data) {
 }
 
 export function teardown(data) {
-    console.log('\n=== Load Test Complete ===');
+    console.log('\n=== Stress Test Complete ===');
     console.log(`Event ID: ${data.eventId}`);
-    console.log(`Sections: ${data.sections.join(', ')}`);
-    console.log(`Total seats: 2500 (5 sections x 500 seats)`);
-    console.log(`Total requests: 1000`);
-    console.log('Check post_duration (fire-and-forget) vs poll_duration (long-poll) vs e2e_duration');
+    console.log(`Total seats: ${data.totalSeats}`);
+    console.log(`Total requests: ${ITERATIONS}`);
+    console.log('Metrics: booking_success (CONFIRMED) + booking_rejected (REJECTED/API pre-filter) + booking_timeout');
+    console.log('api_rejected = bookings rejected at API layer by Redis pre-filter (no Kafka roundtrip)');
 }
