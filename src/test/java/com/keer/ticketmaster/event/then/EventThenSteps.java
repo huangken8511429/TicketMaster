@@ -74,6 +74,25 @@ public class EventThenSteps {
         assertEquals(expectedCount, json.get("sectionCount").asInt(), "區域數量不符");
     }
 
+    @那麼("^活動的開賣時間為「(.+)」$")
+    public void 活動的開賣時間為(String expected) throws Exception {
+        MvcResult result = scenarioContext.getLastResponse();
+        assertNotNull(result, "應該有前一個HTTP回應");
+
+        String responseBody = result.getResponse().getContentAsString();
+        JsonNode json = objectMapper.readTree(responseBody);
+        JsonNode node = json.get("salesStartAt");
+
+        if ("null".equals(expected)) {
+            assertTrue(node == null || node.isNull(),
+                    "salesStartAt 應為 null，實際: " + (node == null ? "<missing>" : node.toString()));
+        } else {
+            assertNotNull(node, "salesStartAt 不應為 null");
+            assertTrue(node.asText().startsWith(expected),
+                    "salesStartAt 不符，預期 " + expected + "，實際 " + node.asText());
+        }
+    }
+
     @那麼("^系統應該回傳 (\\d+) 個活動$")
     public void 系統應該回傳N個活動(int expectedCount) throws Exception {
         MvcResult result = scenarioContext.getLastResponse();

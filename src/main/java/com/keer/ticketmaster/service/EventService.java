@@ -5,6 +5,7 @@ import com.keer.ticketmaster.config.Topic;
 import com.keer.ticketmaster.request.SectionRequest;
 import com.keer.ticketmaster.request.EventRequest;
 import com.keer.ticketmaster.response.EventResponse;
+import com.keer.ticketmaster.po.BookingMode;
 import com.keer.ticketmaster.po.Event;
 import com.keer.ticketmaster.po.Section;
 import com.keer.ticketmaster.repository.EventRepository;
@@ -46,6 +47,7 @@ public class EventService {
         event.setDescription(request.getDescription());
         event.setEventStartTime(request.getEventStartTime());
         event.setEventEndTime(request.getEventEndTime());
+        event.setSalesStartAt(request.getSalesStartAt());
         event.setVenue(venue);
         event.setPerformer(performer);
 
@@ -65,31 +67,29 @@ public class EventService {
 
         Event saved = eventRepository.save(event);
 
-        int totalSeats = 0;
         if (request.getSections() != null) {
             for (SectionRequest section : request.getSections()) {
-                totalSeats += publishSectionInit(saved.getId(), section);
+                publishSectionInit(saved.getId(), section);
             }
         }
 
-        return toResponse(saved, totalSeats);
+        return toResponse(saved);
     }
 
     public EventResponse getEvent(Long id) {
         return eventRepository.findById(id)
-                .map(e -> toResponse(e, null))
+                .map(this::toResponse)
                 .orElse(null);
     }
 
     public List<EventResponse> getAllEvents() {
         return eventRepository.findAll().stream()
-                .map(e -> toResponse(e, null))
+                .map(this::toResponse)
                 .toList();
     }
 
-    private int publishSectionInit(Long eventId, SectionRequest section) {
+    private void publishSectionInit(Long eventId, SectionRequest section) {
         String key = eventId + "-" + section.getName();
-        int totalSeats = section.getRows() * section.getSeatsPerRow();
 
         SectionInitCommand command = SectionInitCommand.newBuilder()
                 .setEventId(eventId)
@@ -100,21 +100,29 @@ public class EventService {
                 .build();
 
         kafkaTemplate.send(Topic.SECTION_INIT, key, command);
-        return totalSeats;
     }
 
-    private EventResponse toResponse(Event event, Integer totalSeats) {
+    private EventResponse toResponse(Event event) {
+        List<Section> sections = event.getSections();
+        int totalSeats = 0;
+        if (sections != null) {
+            for (Section s : sections) {
+                totalSeats += s.getRows() * s.getCols();
+            }
+        }
         return EventResponse.builder()
                 .id(event.getId())
                 .name(event.getName())
                 .description(event.getDescription())
                 .eventStartTime(event.getEventStartTime())
                 .eventEndTime(event.getEventEndTime())
+                .salesStartAt(event.getSalesStartAt())
                 .venueId(event.getVenue().getId())
                 .venueName(event.getVenue().getName())
                 .performerName(event.getPerformer() != null ? event.getPerformer().getName() : null)
                 .totalSeats(totalSeats)
-                .sectionCount(event.getSections() != null ? event.getSections().size() : 0)
+                .sectionCount(sections != null ? sections.size() : 0)
+                .bookingMode(event.getBookingMode() != null ? event.getBookingMode() : BookingMode.SECTION_TEXT)
                 .build();
     }
 }

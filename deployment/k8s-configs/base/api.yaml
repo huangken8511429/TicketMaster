@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ticketmaster-api
+  labels:
+    app: ticketmaster-api
+spec:
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8080
+  selector:
+    app: ticketmaster-api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ticketmaster-api
+  labels:
+    app: ticketmaster-api
+spec:
+  replicas: 32
+  selector:
+    matchLabels:
+      app: ticketmaster-api
+  template:
+    metadata:
+      labels:
+        app: ticketmaster-api
+    spec:
+      containers:
+        - name: api
+          image: ticketmaster:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "api"
+            - name: JAVA_OPTS
+              value: "-XX:+UseZGC -XX:+ZGenerational -Xmx8g -Xms8g -XX:+AlwaysPreTouch"
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: KAFKA_STREAMS_APP_SERVER
+              value: "$(POD_IP):8080"
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka-1:9092,kafka-2:9092,kafka-3:9092"
+            - name: SPRING_DATA_REDIS_HOST
+              value: "redis"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres:5432/mydatabase"
+          resources:
+            requests:
+              cpu: "6000m"
+              memory: "12Gi"
+            limits:
+              cpu: "6000m"
+              memory: "12Gi"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10

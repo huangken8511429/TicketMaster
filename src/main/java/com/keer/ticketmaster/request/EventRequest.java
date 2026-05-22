@@ -25,4 +25,10 @@ public class EventRequest {
     private Long performerId;
 
     private List<SectionRequest> sections;
+
+    /**
+     * Optional: when ticket sales open. Added in Phase 1 frontend-mvp.
+     * Default to null (frontend treats as immediately on sale).
+     */
+    private LocalDateTime salesStartAt;
 }

@@ -62,6 +62,22 @@ public class SeatAvailabilityRedisService {
     }
 
     /**
+     * Read the available seat count for a specific sub-partition.
+     * Returns 0 if the key is missing or unparseable — callers should treat that
+     * as "no inventory tracked here" rather than an error.
+     */
+    public int getAvailableCount(long eventId, String section, int subPartition) {
+        String key = seatAvailKey(eventId, section, subPartition);
+        String val = redisTemplate.opsForValue().get(key);
+        if (val == null) return 0;
+        try {
+            return Integer.parseInt(val);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    /**
      * Find a sub-partition with enough seats and atomically decrement.
      * Uses a single Lua script for one Redis round-trip.
      *

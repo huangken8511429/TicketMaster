@@ -40,4 +40,16 @@ public class Event {
     private LocalDateTime eventStartTime;
 
     private LocalDateTime eventEndTime;
+
+    /**
+     * When ticket sales open for this event.
+     * - null → treat as immediately on sale (legacy data fallback)
+     * - now < salesStartAt → status = NOT_STARTED (countdown shown by frontend)
+     * Added in Phase 1 of frontend-mvp (see specs/frontend-mvp/api-contract.md §4.3).
+     */
+    private LocalDateTime salesStartAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32, columnDefinition = "VARCHAR(32) DEFAULT 'SECTION_TEXT'")
+    private BookingMode bookingMode = BookingMode.SECTION_TEXT;
 }
