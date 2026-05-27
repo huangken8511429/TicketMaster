@@ -3,6 +3,7 @@ package com.keer.ticketmaster.streaming.processor;
 import com.keer.ticketmaster.avro.SectionInitCommand;
 import com.keer.ticketmaster.avro.SectionSeatState;
 import com.keer.ticketmaster.config.StateStore;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.streams.processor.api.Processor;
 import org.apache.kafka.streams.processor.api.ProcessorContext;
 import org.apache.kafka.streams.processor.api.Record;
@@ -20,6 +21,7 @@ import java.util.Set;
  * sends one init command per sub-partition with matching keys to ensure
  * co-partitioning with booking allocation requests.
  */
+@Slf4j
 public class SectionInitProcessor
         implements Processor<String, SectionInitCommand, String, SectionSeatState> {
 
@@ -43,9 +45,15 @@ public class SectionInitProcessor
 
         Set<String> reserved = new HashSet<>(command.getInitialReserved());
 
-        // Extract sub-partition index from record key (format: eventId-section-sp)
+        // Extract sub-partition index from record key (format: eventId-section-sp).
+        // Malformed keys (legacy 2-part keys, garbage from dev experiments, etc.)
+        // are skipped so a poisoned record doesn't crash the stream client.
         String storeKey = record.key();
         int sp = extractSubPartition(storeKey);
+        if (sp < 0) {
+            log.warn("Skipping section-init record with malformed key='{}' (expected eventId-section-sp)", storeKey);
+            return;
+        }
 
         int totalSeats = rows * seatsPerRow;
         int seatsPerSubPartition = totalSeats / subPartitions;
@@ -87,7 +95,14 @@ public class SectionInitProcessor
     }
 
     private int extractSubPartition(String key) {
+        if (key == null) return -1;
         int lastDash = key.lastIndexOf('-');
-        return Integer.parseInt(key.substring(lastDash + 1));
+        if (lastDash < 0 || lastDash == key.length() - 1) return -1;
+        try {
+            int sp = Integer.parseInt(key.substring(lastDash + 1));
+            return sp >= 0 ? sp : -1;
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 }
