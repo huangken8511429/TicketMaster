@@ -7,7 +7,6 @@ const bookingSuccess = new Counter('booking_success');
 const bookingRejected = new Counter('booking_rejected');
 const bookingTimeout = new Counter('booking_timeout');
 const bookingError = new Counter('booking_error');
-const apiRejected = new Counter('api_rejected');  // Redis pre-filter rejection
 const successRate = new Rate('booking_success_rate');
 const postDuration = new Trend('post_duration', true);
 const pollDuration = new Trend('poll_duration', true);
@@ -128,15 +127,6 @@ export default function (data) {
     });
     postDuration.add(Date.now() - postStart);
 
-    // Handle Redis pre-filter rejection (422)
-    if (postRes.status === 422) {
-        apiRejected.add(1);
-        bookingRejected.add(1);
-        successRate.add(true);  // Pre-filter rejection is expected behavior
-        e2eDuration.add(Date.now() - e2eStart);
-        return;
-    }
-
     if (postRes.status !== 202) {
         bookingError.add(1);
         successRate.add(false);
@@ -176,6 +166,5 @@ export function teardown(data) {
     console.log(`Event ID: ${data.eventId}`);
     console.log(`Total seats: ${data.totalSeats}`);
     console.log(`Total requests: ${ITERATIONS}`);
-    console.log('Metrics: booking_success (CONFIRMED) + booking_rejected (REJECTED/API pre-filter) + booking_timeout');
-    console.log('api_rejected = bookings rejected at API layer by Redis pre-filter (no Kafka roundtrip)');
+    console.log('Metrics: booking_success (CONFIRMED) + booking_rejected (REJECTED) + booking_timeout');
 }
