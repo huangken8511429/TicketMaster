@@ -18,7 +18,7 @@
       | seatNumber | price | status    |
       | A1-001     | 2800  | AVAILABLE |
       | A1-002     | 2800  | AVAILABLE |
-      | B1-001     | 1800  | SOLD      |
+      | B1-001     | 1800  | BOOKED      |
     當 我查詢該活動的所有票券
     那麼 系統應該回傳 200 OK
     並且 系統應該回傳 3 張票券
@@ -30,7 +30,7 @@
       | seatNumber | price | status    |
       | A1-001     | 2800  | AVAILABLE |
       | A1-002     | 2800  | AVAILABLE |
-      | B1-001     | 1800  | SOLD      |
+      | B1-001     | 1800  | BOOKED      |
     當 我查詢該活動的可用票券
     那麼 系統應該回傳 200 OK
     並且 系統應該回傳 2 張票券

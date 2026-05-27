@@ -2,15 +2,20 @@ package com.keer.ticketmaster.event.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keer.ticketmaster.ScenarioContext;
-import com.keer.ticketmaster.event.dto.EventRequest;
-import com.keer.ticketmaster.event.repository.EventRepository;
+import com.keer.ticketmaster.request.EventRequest;
+import com.keer.ticketmaster.request.SectionRequest;
+import com.keer.ticketmaster.repository.EventRepository;
 import io.cucumber.java.zh_tw.當;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import java.time.LocalDate;
+import io.cucumber.datatable.DataTable;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 
@@ -32,7 +37,60 @@ public class EventWhenSteps {
     public void 我建立一個活動(String name, String description, String eventDate) throws Exception {
         Long venueId = (Long) scenarioContext.get("createdVenueId");
 
-        EventRequest request = new EventRequest(name, description, LocalDate.parse(eventDate), venueId, null);
+        EventRequest request = new EventRequest(name, description, LocalDateTime.parse(eventDate + "T00:00:00"), null, venueId, null, null, null);
+
+        MvcResult result = mockMvc.perform(
+                post("/api/events")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andReturn();
+
+        scenarioContext.setLastResponse(result);
+    }
+
+    @當("^我建立一個活動，名稱為「(.+)」，描述為「(.+)」，開始時間為「(.+)」，結束時間為「(.+)」，開賣時間為「(.+)」，關聯表演者為該表演者，關聯場館為該場館，包含以下區域:$")
+    public void 我建立一個活動含開賣時間(String name, String description, String startTime, String endTime, String salesStartAt, DataTable dataTable) throws Exception {
+        Long venueId = (Long) scenarioContext.get("createdVenueId");
+        Long performerId = (Long) scenarioContext.get("createdPerformerId");
+
+        List<SectionRequest> sections = dataTable.asMaps(String.class, String.class).stream()
+                .map(row -> new SectionRequest(
+                        row.get("name"),
+                        Integer.parseInt(row.get("rows")),
+                        Integer.parseInt(row.get("cols"))))
+                .toList();
+
+        EventRequest request = new EventRequest(
+                name, description,
+                LocalDateTime.parse(startTime), LocalDateTime.parse(endTime),
+                venueId, performerId, sections,
+                LocalDateTime.parse(salesStartAt));
+
+        MvcResult result = mockMvc.perform(
+                post("/api/events")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andReturn();
+
+        scenarioContext.setLastResponse(result);
+    }
+
+    @當("^我建立一個活動，名稱為「([^」]+)」，描述為「([^」]+)」，開始時間為「([^」]+)」，結束時間為「([^」]+)」，關聯表演者為該表演者，關聯場館為該場館，包含以下區域:$")
+    public void 我建立一個活動含表演者場館區域(String name, String description, String startTime, String endTime, DataTable dataTable) throws Exception {
+        Long venueId = (Long) scenarioContext.get("createdVenueId");
+        Long performerId = (Long) scenarioContext.get("createdPerformerId");
+
+        List<SectionRequest> sections = dataTable.asMaps(String.class, String.class).stream()
+                .map(row -> new SectionRequest(
+                        row.get("name"),
+                        Integer.parseInt(row.get("rows")),
+                        Integer.parseInt(row.get("cols"))))
+                .toList();
+
+        EventRequest request = new EventRequest(
+                name, description,
+                LocalDateTime.parse(startTime), LocalDateTime.parse(endTime),
+                venueId, performerId, sections, null);
 
         MvcResult result = mockMvc.perform(
                 post("/api/events")

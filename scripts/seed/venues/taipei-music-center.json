@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "viewBox": "0 0 800 500",
+  "stage": {
+    "position": "north",
+    "shape": "polygon",
+    "polygon": [[280, 20], [520, 20], [580, 80], [220, 80]],
+    "label": "STAGE"
+  },
+  "sections": [
+    {
+      "name": "VIP",
+      "displayName": "VIP",
+      "tier": "vip",
+      "shape": "polygon",
+      "polygon": [[260, 110], [540, 110], [540, 200], [260, 200]],
+      "stageFacing": "north"
+    },
+    {
+      "name": "Standing",
+      "displayName": "站區",
+      "tier": "standing",
+      "shape": "polygon",
+      "polygon": [[260, 220], [540, 220], [540, 340], [260, 340]],
+      "stageFacing": "north"
+    },
+    {
+      "name": "Seated A",
+      "displayName": "座位 A",
+      "tier": "tier1",
+      "shape": "polygon",
+      "polygon": [[80, 200], [240, 200], [240, 380], [60, 400]],
+      "stageFacing": "east"
+    },
+    {
+      "name": "Seated B",
+      "displayName": "座位 B",
+      "tier": "tier1",
+      "shape": "polygon",
+      "polygon": [[560, 200], [720, 200], [740, 400], [560, 380]],
+      "stageFacing": "west"
+    }
+  ],
+  "legend": [
+    { "label": "VIP", "swatch": "vip" },
+    { "label": "座位", "swatch": "tier1" },
+    { "label": "站位", "swatch": "standing" }
+  ]
+}

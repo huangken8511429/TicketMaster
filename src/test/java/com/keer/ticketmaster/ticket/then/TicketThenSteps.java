@@ -3,7 +3,7 @@ package com.keer.ticketmaster.ticket.then;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.type.CollectionType;
 import com.keer.ticketmaster.ScenarioContext;
-import com.keer.ticketmaster.ticket.dto.TicketResponse;
+import com.keer.ticketmaster.response.TicketResponse;
 import io.cucumber.java.zh_tw.那麼;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MvcResult;
@@ -28,8 +28,11 @@ public class TicketThenSteps {
         String responseBody = result.getResponse().getContentAsString();
         TicketResponse response = objectMapper.readValue(responseBody, TicketResponse.class);
 
-        assertEquals(expectedSeat, response.getSeatNumber(),
-                "座位號應為 " + expectedSeat);
+        // Parse expected seat like "A1-001" into section and col
+        String expectedSection = expectedSeat.substring(0, expectedSeat.indexOf('-'));
+        int expectedCol = Integer.parseInt(expectedSeat.substring(expectedSeat.indexOf('-') + 1));
+        assertEquals(expectedSection, response.getSection(), "區域應為 " + expectedSection);
+        assertEquals(expectedCol, response.getSeatCol(), "座位欄應為 " + expectedCol);
         assertEquals(expectedPrice, response.getPrice().intValue(),
                 "價格應為 " + expectedPrice);
         assertEquals(expectedStatus, response.getStatus(),

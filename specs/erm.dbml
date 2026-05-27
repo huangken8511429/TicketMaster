@@ -1,0 +1,51 @@
+// TicketMaster Entity-Relationship Model
+// SSOT for all database schema definitions
+
+Table venue {
+  id bigint [pk, increment]
+  name varchar [not null]
+  location varchar [not null]
+  seat_map text
+}
+
+Table performer {
+  id bigint [pk, increment]
+  name varchar [not null]
+  description varchar
+}
+
+Table event {
+  id bigint [pk, increment]
+  name varchar [not null]
+  performer_id bigint
+  venue_id bigint [not null]
+  description varchar
+  event_start_time timestamp [not null]
+  event_end_time timestamp
+}
+
+Table section {
+  id bigint [pk, increment]
+  event_id bigint
+  name varchar [not null]
+  rows integer
+  cols integer
+  available_seats integer
+}
+
+Table ticket {
+  id bigint [pk, increment]
+  event_id bigint [not null]
+  price decimal [not null]
+  status varchar [not null, default: 'AVAILABLE', note: 'AVAILABLE, BOOKED']
+  user_id varchar
+  seat_section varchar
+  seat_row integer
+  seat_col integer
+}
+
+// Relationships
+Ref: event.performer_id > performer.id
+Ref: event.venue_id > venue.id
+Ref: section.event_id > event.id
+Ref: ticket.event_id > event.id

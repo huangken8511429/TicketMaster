@@ -1,0 +1,89 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Mirrors the ticket-master 32-instance-perf-v.0.0.23 overlay, the published
+# config that hit 84,745 RPS / p95 735 ms on 1,000,000 reservations.
+#
+# Sizing rationale (vs the published numbers):
+#   api                   32 × 6 CPU / 12 Gi   == ticket-master Ticket Service
+#   reservation-processor 32 × 2 CPU / 2 Gi    == ticket-master Reservation Service
+#   seat-processor        32 × 2 CPU / 4 Gi    >= ticket-master Event Service
+#                                                 (kept extra Gi for RocksDB
+#                                                  bitmap state under heavy
+#                                                  SeatAllocationProcessor load)
+#
+# Apply:
+#   kubectl apply -k deployment/k8s-configs/overlays/32-instance-perf
+
+resources:
+  - ../../base
+
+# Pin Kafka Streams to 1 thread per pod so 32 replicas × 1 thread cover
+# 32 partitions 1:1. The base default is 16 (set in application.properties
+# for local dev) which would spawn 32 × 16 standby tasks otherwise.
+configMapGenerator:
+  - name: tm-cloud-properties
+    behavior: replace
+    files:
+      - application-cloud.properties
+    options:
+      disableNameSuffixHash: true
+
+patches:
+  # === api: 32 × 6 CPU / 12 Gi ===
+  - target:
+      kind: Deployment
+      name: ticketmaster-api
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 32
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "4000m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "12Gi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "6000m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "12Gi"
+      # Bump JVM heap to match the larger container. -Xmx11g leaves ~1Gi for
+      # off-heap (RocksDB block cache, direct buffers, threads, etc.).
+      - op: replace
+        path: /spec/template/spec/containers/0/env/2/value
+        value: "-XX:+UseZGC -XX:+ZGenerational -Xmx11g -Xms11g -XX:+AlwaysPreTouch"
+
+  # Pin api at 32 — disable HPA scaling during perf runs (predictable baseline).
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: ticketmaster-api
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 32
+      - op: replace
+        path: /spec/maxReplicas
+        value: 32
+
+  # === reservation-processor: 32 × 2 CPU / 2 Gi ===
+  - target:
+      kind: Deployment
+      name: ticketmaster-reservation-processor
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 32
+
+  # === seat-processor: 32 × 2 CPU / 4 Gi ===
+  # Memory left at base (4Gi) — RocksDB bitmap state under SeatAllocationProcessor
+  # benefits from the extra off-heap room versus ticket-master event-service.
+  - target:
+      kind: Deployment
+      name: ticketmaster-seat-processor
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 32

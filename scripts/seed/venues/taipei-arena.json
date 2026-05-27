@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "viewBox": "0 0 1000 700",
+  "stage": {
+    "position": "north",
+    "shape": "rect",
+    "rect": { "x": 350, "y": 30, "width": 300, "height": 60 },
+    "label": "STAGE"
+  },
+  "sections": [
+    {
+      "name": "VIP",
+      "displayName": "VIP",
+      "tier": "vip",
+      "shape": "polygon",
+      "polygon": [[320, 120], [520, 120], [520, 230], [320, 230]],
+      "stageFacing": "north"
+    },
+    {
+      "name": "VIP Diamond",
+      "displayName": "VIP Diamond",
+      "tier": "vip",
+      "shape": "polygon",
+      "polygon": [[540, 120], [700, 120], [700, 230], [540, 230]],
+      "stageFacing": "north"
+    },
+    {
+      "name": "VIP Gold",
+      "displayName": "VIP Gold",
+      "tier": "vip",
+      "shape": "polygon",
+      "polygon": [[120, 120], [300, 120], [300, 230], [120, 230]],
+      "stageFacing": "north"
+    },
+    {
+      "name": "搖滾A",
+      "displayName": "搖滾 A",
+      "tier": "standing",
+      "shape": "polygon",
+      "polygon": [[120, 250], [320, 250], [320, 380], [120, 380]],
+      "stageFacing": "north"
+    },
+    {
+      "name": "搖滾B",
+      "displayName": "搖滾 B",
+      "tier": "standing",
+      "shape": "polygon",
+      "polygon": [[340, 250], [520, 250], [520, 380], [340, 380]],
+      "stageFacing": "north"
+    },
+    {
+      "name": "Floor A",
+      "displayName": "Floor A",
+      "tier": "tier1",
+      "shape": "polygon",
+      "polygon": [[540, 250], [700, 250], [700, 380], [540, 380]],
+      "stageFacing": "north"
+    },
+    {
+      "name": "Floor B",
+      "displayName": "Floor B",
+      "tier": "tier1",
+      "shape": "polygon",
+      "polygon": [[720, 250], [880, 250], [880, 380], [720, 380]],
+      "stageFacing": "north"
+    },
+    {
+      "name": "看台紅",
+      "displayName": "看台 紅",
+      "tier": "tier2",
+      "shape": "polygon",
+      "polygon": [[80, 400], [280, 400], [260, 540], [60, 540]],
+      "stageFacing": "east"
+    },
+    {
+      "name": "看台藍",
+      "displayName": "看台 藍",
+      "tier": "tier2",
+      "shape": "polygon",
+      "polygon": [[300, 400], [500, 400], [500, 540], [300, 540]],
+      "stageFacing": "north"
+    },
+    {
+      "name": "看台黃",
+      "displayName": "看台 黃",
+      "tier": "tier2",
+      "shape": "polygon",
+      "polygon": [[520, 400], [720, 400], [720, 540], [520, 540]],
+      "stageFacing": "north"
+    },
+    {
+      "name": "看台 100",
+      "displayName": "看台 100",
+      "tier": "tier2",
+      "shape": "polygon",
+      "polygon": [[740, 400], [940, 400], [960, 540], [740, 540]],
+      "stageFacing": "west"
+    },
+    {
+      "name": "看台 200",
+      "displayName": "看台 200",
+      "tier": "tier2",
+      "shape": "polygon",
+      "polygon": [[280, 560], [720, 560], [680, 660], [320, 660]],
+      "stageFacing": "north"
+    }
+  ],
+  "legend": [
+    { "label": "VIP", "swatch": "vip" },
+    { "label": "1F 搖滾 / Floor", "swatch": "tier1" },
+    { "label": "看台", "swatch": "tier2" },
+    { "label": "站位", "swatch": "standing" }
+  ]
+}

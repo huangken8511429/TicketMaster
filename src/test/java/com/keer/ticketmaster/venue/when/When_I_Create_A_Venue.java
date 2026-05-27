@@ -2,7 +2,7 @@ package com.keer.ticketmaster.venue.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keer.ticketmaster.ScenarioContext;
-import com.keer.ticketmaster.venue.dto.VenueRequest;
+import com.keer.ticketmaster.request.VenueRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -25,8 +25,8 @@ public class When_I_Create_A_Venue {
     @Autowired
     private ScenarioContext scenarioContext;
 
-    public void execute(String name, String address, int capacity) throws Exception {
-        VenueRequest request = new VenueRequest(name, address, capacity);
+    public void execute(String name, String location) throws Exception {
+        VenueRequest request = new VenueRequest(name, location, null);
 
         MvcResult result = mockMvc.perform(
                 post("/api/venues")

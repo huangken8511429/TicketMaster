@@ -1,0 +1,64 @@
+/**
+ * Design tokens — single source of truth.
+ * Mirrors specs/frontend-mvp/design-tokens.md (sections 2-9).
+ * Tailwind references these via tailwind.config.ts.
+ */
+
+:root {
+  /* === Base palette === */
+  --bg-ink: #0a0a0b;
+  --bg-surface: #141416;
+  --bg-surface-2: #1c1c1f;
+  --bg-elevated: #26262a;
+  --border-subtle: #26262a;
+  --border-strong: #3d3d42;
+
+  /* === Foreground === */
+  --fg-primary: #f5f5f7;
+  --fg-secondary: #a8a8ae;
+  --fg-tertiary: #85858b;
+  --fg-inverse: #0a0a0b;
+
+  /* === Accent — Acid Lime === */
+  --accent: #d6ff3d;
+  --accent-hover: #e3ff66;
+  --accent-pressed: #b8e020;
+  --accent-muted: #3d4717;
+
+  /* === Section status === */
+  --status-plenty: #34d399;
+  --status-limited: #fbbf24;
+  --status-few: #f87171;
+  --status-sold-out: #52525b;
+
+  /* === Semantic === */
+  --error: #f87171;
+  --warning: #fbbf24;
+  --info: #60a5fa;
+
+  /* === Motion durations === */
+  --motion-instant: 0ms;
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 320ms;
+  --motion-slower: 600ms;
+  --motion-pulse: 1600ms;
+  --motion-queue-cycle: 2400ms;
+
+  /* === Easing === */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-decel: cubic-bezier(0, 0, 0.2, 1);
+  --ease-accel: cubic-bezier(0.4, 0, 1, 1);
+  --ease-snap: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

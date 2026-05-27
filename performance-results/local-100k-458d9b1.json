@@ -1,0 +1,272 @@
+{
+    "setup_data": {
+        "eventId": 6,
+        "sections": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J"
+        ],
+        "totalSeats": 20000
+    },
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {
+            "setup": {
+                "name": "setup",
+                "path": "::setup",
+                "id": "5c0f8025f7e0b6654089e5b00e950f1a",
+                "groups": {},
+                "checks": {
+                        "venue created": {
+                            "id": "c9711a03eef5429c3519701d8e8716f1",
+                            "passes": 1,
+                            "fails": 0,
+                            "name": "venue created",
+                            "path": "::setup::venue created"
+                        },
+                        "event created": {
+                            "name": "event created",
+                            "path": "::setup::event created",
+                            "id": "1f1f5459ceb43cd5ccabd96402cc8889",
+                            "passes": 1,
+                            "fails": 0
+                        },
+                        "section A init": {
+                            "path": "::setup::section A init",
+                            "id": "381f94906d5b13d85705a0b80ba82023",
+                            "passes": 1,
+                            "fails": 0,
+                            "name": "section A init"
+                        },
+                        "section B init": {
+                            "path": "::setup::section B init",
+                            "id": "8477bea1e4d6c18464b8a05693752b7b",
+                            "passes": 1,
+                            "fails": 0,
+                            "name": "section B init"
+                        },
+                        "section C init": {
+                            "passes": 1,
+                            "fails": 0,
+                            "name": "section C init",
+                            "path": "::setup::section C init",
+                            "id": "709c885d7fab0c5fec2a0ff2f76ad349"
+                        },
+                        "section D init": {
+                            "name": "section D init",
+                            "path": "::setup::section D init",
+                            "id": "7d9e713cb1f452839d10055e6ef324e9",
+                            "passes": 1,
+                            "fails": 0
+                        },
+                        "section E init": {
+                            "name": "section E init",
+                            "path": "::setup::section E init",
+                            "id": "2344884282a75a25ad0bf9f74f1548a9",
+                            "passes": 1,
+                            "fails": 0
+                        },
+                        "section F init": {
+                            "name": "section F init",
+                            "path": "::setup::section F init",
+                            "id": "53e9bd4af49fb49c95abfa957648cd9e",
+                            "passes": 1,
+                            "fails": 0
+                        },
+                        "section G init": {
+                            "name": "section G init",
+                            "path": "::setup::section G init",
+                            "id": "117d54c9a7b0786706324787a0a2de37",
+                            "passes": 1,
+                            "fails": 0
+                        },
+                        "section H init": {
+                            "id": "8479cbb91583daca2b08acb04bc8905e",
+                            "passes": 1,
+                            "fails": 0,
+                            "name": "section H init",
+                            "path": "::setup::section H init"
+                        },
+                        "section I init": {
+                            "passes": 1,
+                            "fails": 0,
+                            "name": "section I init",
+                            "path": "::setup::section I init",
+                            "id": "1ca7951cf974299b4c2f1d3b16337815"
+                        },
+                        "section J init": {
+                            "id": "3efb4a027edbc143029c3a9ca10339b0",
+                            "passes": 1,
+                            "fails": 0,
+                            "name": "section J init",
+                            "path": "::setup::section J init"
+                        }
+                    }
+            }
+        },
+        "checks": {}
+    },
+    "metrics": {
+        "http_req_duration": {
+            "min": 0,
+            "med": 100.2,
+            "max": 5552.416,
+            "p(90)": 829.4483000000001,
+            "p(95)": 951.9934999999997,
+            "avg": 355.6881710647367
+        },
+        "data_received": {
+            "count": 67588576,
+            "rate": 91351.48634952906
+        },
+        "booking_success": {
+            "count": 11754,
+            "rate": 15.886491979833465
+        },
+        "http_reqs": {
+            "count": 200012,
+            "rate": 270.33257051815986
+        },
+        "http_req_receiving": {
+            "max": 56.417,
+            "p(90)": 0.195,
+            "p(95)": 0.343,
+            "avg": 0.1133258504489679,
+            "min": 0,
+            "med": 0.044
+        },
+        "poll_duration": {
+            "avg": 709.6911038220765,
+            "min": 194,
+            "med": 669,
+            "max": 3135,
+            "p(90)": 952,
+            "p(95)": 1116
+        },
+        "http_req_failed": {
+            "passes": 2,
+            "fails": 200010,
+            "value": 0.000009999400035997841
+        },
+        "iteration_duration": {
+            "avg": 713.2921874548535,
+            "min": 195.670291,
+            "med": 671.6967295,
+            "max": 5826.427792,
+            "p(90)": 956.0843545,
+            "p(95)": 1122.4150315499999
+        },
+        "iterations": {
+            "count": 100000,
+            "rate": 135.15817576853382
+        },
+        "http_req_connecting": {
+            "avg": 0.062067040977541295,
+            "min": 0,
+            "med": 0,
+            "max": 47.423,
+            "p(90)": 0,
+            "p(95)": 0
+        },
+        "http_req_tls_handshaking": {
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0,
+            "min": 0,
+            "med": 0,
+            "max": 0
+        },
+        "booking_error": {
+            "rate": 0.0027031635153706764,
+            "count": 2
+        },
+        "booking_success_rate": {
+            "passes": 99998,
+            "fails": 2,
+            "thresholds": {
+                "rate>0.3": false
+            },
+            "value": 0.99998
+        },
+        "vus": {
+            "value": 100,
+            "min": 0,
+            "max": 100
+        },
+        "data_sent": {
+            "count": 31783008,
+            "rate": 42957.33381716717
+        },
+        "e2e_duration": {
+            "avg": 713.0966419328387,
+            "min": 196,
+            "med": 672,
+            "max": 5827,
+            "p(90)": 956,
+            "p(95)": 1122
+        },
+        "checks": {
+            "passes": 12,
+            "fails": 0,
+            "value": 1
+        },
+        "booking_rejected": {
+            "count": 88244,
+            "rate": 119.268980625185
+        },
+        "http_req_waiting": {
+            "med": 99.98249999999999,
+            "max": 5546.209,
+            "p(90)": 829.3356,
+            "p(95)": 951.8284999999997,
+            "avg": 355.55563302701603,
+            "min": 0
+        },
+        "http_req_duration{expected_response:true}": {
+            "p(95)": 951.9964999999997,
+            "avg": 355.69172776861217,
+            "min": 0.269,
+            "med": 100.8415,
+            "max": 5552.416,
+            "p(90)": 829.4505
+        },
+        "http_req_blocked": {
+            "avg": 0.6392710837338059,
+            "min": 0,
+            "med": 0.002,
+            "max": 5008.093,
+            "p(90)": 0.005,
+            "p(95)": 0.008
+        },
+        "http_req_sending": {
+            "min": 0,
+            "med": 0.009,
+            "max": 17.963,
+            "p(90)": 0.021,
+            "p(95)": 0.036,
+            "avg": 0.019212187268766594
+        },
+        "post_duration": {
+            "avg": 3.46004,
+            "min": 0,
+            "med": 1,
+            "max": 5007,
+            "p(90)": 5,
+            "p(95)": 6
+        },
+        "vus_max": {
+            "value": 100,
+            "min": 100,
+            "max": 100
+        }
+    }
+}

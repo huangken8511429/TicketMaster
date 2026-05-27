@@ -1,7 +1,7 @@
 package com.keer.ticketmaster.venue.given;
 
-import com.keer.ticketmaster.venue.model.Venue;
-import com.keer.ticketmaster.venue.repository.VenueRepository;
+import com.keer.ticketmaster.po.Venue;
+import com.keer.ticketmaster.repository.VenueRepository;
 
 import java.util.List;
 

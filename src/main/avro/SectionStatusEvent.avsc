@@ -5,6 +5,8 @@
   "fields": [
     {"name": "eventId", "type": "long"},
     {"name": "section", "type": "string"},
+    {"name": "subPartition", "type": "int", "default": 0},
+    {"name": "totalSubPartitions", "type": "int", "default": 1},
     {"name": "availableCount", "type": "int"},
     {"name": "timestamp", "type": "long", "logicalType": "timestamp-millis"}
   ]

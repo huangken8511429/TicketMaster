@@ -13,9 +13,12 @@ import org.springframework.kafka.test.context.EmbeddedKafka;
         topics = {
                 "section-init",
                 "section-status",
-                "reservation-commands",
-                "reservation-requests",
-                "reservation-completed"
+                "booking-commands",
+                "seat-allocation-requests",
+                "seat-allocation-results",
+                "booking-completed",
+                "ticket-commands",
+                "ticket-state"
         }
 )
 public class CucumberSpringConfiguration {

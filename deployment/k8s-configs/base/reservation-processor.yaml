@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ticketmaster-reservation-processor
+  labels:
+    app: ticketmaster-reservation-processor
+spec:
+  replicas: 32
+  selector:
+    matchLabels:
+      app: ticketmaster-reservation-processor
+  template:
+    metadata:
+      labels:
+        app: ticketmaster-reservation-processor
+    spec:
+      containers:
+        - name: reservation-processor
+          image: ticketmaster:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "reservation-processor"
+            - name: JAVA_OPTS
+              value: "-XX:+UseZGC -XX:+ZGenerational -Xmx1500m -Xms1500m -XX:+AlwaysPreTouch"
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka-1:9092,kafka-2:9092,kafka-3:9092"
+          resources:
+            requests:
+              cpu: "2000m"
+              memory: "2Gi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"

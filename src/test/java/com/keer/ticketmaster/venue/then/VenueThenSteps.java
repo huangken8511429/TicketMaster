@@ -3,7 +3,7 @@ package com.keer.ticketmaster.venue.then;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.type.CollectionType;
 import com.keer.ticketmaster.ScenarioContext;
-import com.keer.ticketmaster.venue.dto.VenueResponse;
+import com.keer.ticketmaster.response.VenueResponse;
 import io.cucumber.java.zh_tw.那麼;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MvcResult;
@@ -35,10 +35,29 @@ public class VenueThenSteps {
                     .constructCollectionType(List.class, VenueResponse.class);
             List<VenueResponse> venues = objectMapper.readValue(responseBody, listType);
             assertFalse(venues.isEmpty(), "場館列表不應為空");
-            validateVenue(venues.get(0), expectedName, expectedAddress, expectedCapacity);
+            validateVenue(venues.get(0), expectedName, expectedAddress);
         } else {
             VenueResponse response = objectMapper.readValue(responseBody, VenueResponse.class);
-            validateVenue(response, expectedName, expectedAddress, expectedCapacity);
+            validateVenue(response, expectedName, expectedAddress);
+        }
+    }
+
+    @那麼("^場館資訊包含名稱「(.+)」、地址「(.+)」、座位圖「(.+)」$")
+    public void 場館資訊包含名稱地址座位圖(String expectedName, String expectedAddress, String expectedSeatMap) throws Exception {
+        MvcResult result = scenarioContext.getLastResponse();
+        assertNotNull(result, "應該有前一個HTTP回應");
+
+        String responseBody = result.getResponse().getContentAsString();
+        responseBody = responseBody.trim();
+        if (responseBody.startsWith("[")) {
+            CollectionType listType = objectMapper.getTypeFactory()
+                    .constructCollectionType(List.class, VenueResponse.class);
+            List<VenueResponse> venues = objectMapper.readValue(responseBody, listType);
+            assertFalse(venues.isEmpty(), "場館列表不應為空");
+            validateVenueWithSeatMap(venues.get(0), expectedName, expectedAddress, expectedSeatMap);
+        } else {
+            VenueResponse response = objectMapper.readValue(responseBody, VenueResponse.class);
+            validateVenueWithSeatMap(response, expectedName, expectedAddress, expectedSeatMap);
         }
     }
 
@@ -57,12 +76,17 @@ public class VenueThenSteps {
     }
 
     private void validateVenue(VenueResponse response, String expectedName,
-                               String expectedAddress, int expectedCapacity) {
+                               String expectedLocation) {
         assertEquals(expectedName, response.getName(),
                 "場館名稱應為 " + expectedName);
-        assertEquals(expectedAddress, response.getAddress(),
-                "場館地址應為 " + expectedAddress);
-        assertEquals(expectedCapacity, response.getCapacity(),
-                "場館容量應為 " + expectedCapacity);
+        assertEquals(expectedLocation, response.getLocation(),
+                "場館地點應為 " + expectedLocation);
+    }
+
+    private void validateVenueWithSeatMap(VenueResponse response, String expectedName,
+                                           String expectedLocation, String expectedSeatMap) {
+        validateVenue(response, expectedName, expectedLocation);
+        assertEquals(expectedSeatMap, response.getSeatMap(),
+                "場館座位圖應為 " + expectedSeatMap);
     }
 }

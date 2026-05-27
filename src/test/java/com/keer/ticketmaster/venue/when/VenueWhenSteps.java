@@ -2,12 +2,11 @@ package com.keer.ticketmaster.venue.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keer.ticketmaster.ScenarioContext;
-import com.keer.ticketmaster.venue.dto.VenueRequest;
-import com.keer.ticketmaster.venue.repository.VenueRepository;
+import com.keer.ticketmaster.request.VenueRequest;
+import com.keer.ticketmaster.repository.VenueRepository;
 import io.cucumber.java.zh_tw.當;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.stereotype.Component;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -29,7 +28,20 @@ public class VenueWhenSteps {
 
     @當("^我建立一個場館，名稱為「(.+)」，地址為「(.+)」，容量為 (\\d+)$")
     public void 我建立一個場館(String name, String address, int capacity) throws Exception {
-        VenueRequest request = new VenueRequest(name, address, capacity);
+        VenueRequest request = new VenueRequest(name, address, null);
+
+        MvcResult result = mockMvc.perform(
+                post("/api/venues")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andReturn();
+
+        scenarioContext.setLastResponse(result);
+    }
+
+    @當("^我建立一個場館，名稱為「(.+)」，地址為「(.+)」，座位圖為「(.+)」$")
+    public void 我建立一個場館含座位圖(String name, String address, String seatMap) throws Exception {
+        VenueRequest request = new VenueRequest(name, address, seatMap);
 
         MvcResult result = mockMvc.perform(
                 post("/api/venues")

@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "viewBox": "0 0 800 600",
+  "stage": {
+    "position": "north",
+    "shape": "rect",
+    "rect": { "x": 280, "y": 30, "width": 240, "height": 50 },
+    "label": "STAGE"
+  },
+  "sections": [
+    {
+      "name": "VIP",
+      "displayName": "VIP",
+      "tier": "vip",
+      "shape": "polygon",
+      "polygon": [[260, 110], [540, 110], [540, 220], [260, 220]],
+      "stageFacing": "north"
+    },
+    {
+      "name": "搖滾",
+      "displayName": "搖滾區",
+      "tier": "standing",
+      "shape": "polygon",
+      "polygon": [[260, 240], [540, 240], [540, 360], [260, 360]],
+      "stageFacing": "north"
+    },
+    {
+      "name": "A區",
+      "displayName": "A 區",
+      "tier": "tier1",
+      "shape": "polygon",
+      "polygon": [[100, 220], [240, 220], [240, 380], [80, 400]],
+      "stageFacing": "east"
+    },
+    {
+      "name": "B區",
+      "displayName": "B 區",
+      "tier": "tier1",
+      "shape": "polygon",
+      "polygon": [[260, 380], [540, 380], [520, 480], [280, 480]],
+      "stageFacing": "north"
+    },
+    {
+      "name": "C區",
+      "displayName": "C 區",
+      "tier": "tier1",
+      "shape": "polygon",
+      "polygon": [[560, 220], [700, 220], [720, 400], [560, 380]],
+      "stageFacing": "west"
+    },
+    {
+      "name": "看台 A",
+      "displayName": "看台 A",
+      "tier": "tier2",
+      "shape": "polygon",
+      "polygon": [[80, 420], [260, 400], [280, 500], [100, 540]],
+      "stageFacing": "east"
+    },
+    {
+      "name": "看台 B",
+      "displayName": "看台 B",
+      "tier": "tier2",
+      "shape": "polygon",
+      "polygon": [[540, 400], [720, 420], [700, 540], [520, 500]],
+      "stageFacing": "west"
+    }
+  ],
+  "legend": [
+    { "label": "VIP", "swatch": "vip" },
+    { "label": "1F", "swatch": "tier1" },
+    { "label": "看台", "swatch": "tier2" },
+    { "label": "站位", "swatch": "standing" }
+  ]
+}

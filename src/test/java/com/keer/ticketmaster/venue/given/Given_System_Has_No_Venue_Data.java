@@ -1,6 +1,6 @@
 package com.keer.ticketmaster.venue.given;
 
-import com.keer.ticketmaster.venue.repository.VenueRepository;
+import com.keer.ticketmaster.repository.VenueRepository;
 
 /**
  * Given: 系統中沒有任何場館資料
