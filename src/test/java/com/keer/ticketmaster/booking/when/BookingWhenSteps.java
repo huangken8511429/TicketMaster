@@ -46,11 +46,15 @@ public class BookingWhenSteps {
 
         scenarioContext.setLastResponse(result);
 
-        // Extract bookingId from the full BookingResponse
+        // POST returns 202 Accepted with body {"bookingId": "..."}.
+        // The full BookingResponse comes later via GET long-poll (see BookingThenSteps).
         String responseBody = result.getResponse().getContentAsString();
-        if (result.getResponse().getStatus() == 200 && !responseBody.isEmpty()) {
-            BookingResponse response = objectMapper.readValue(responseBody, BookingResponse.class);
-            scenarioContext.set("bookingId", response.getBookingId());
+        int status = result.getResponse().getStatus();
+        if ((status == 202 || status == 200) && !responseBody.isEmpty()) {
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(responseBody);
+            if (node.hasNonNull("bookingId")) {
+                scenarioContext.set("bookingId", node.get("bookingId").asText());
+            }
         }
     }
 }
