@@ -33,7 +33,7 @@ public class TicketController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<TicketResponse> getTicket(@PathVariable Long id) {
+    public ResponseEntity<TicketResponse> getTicket(@PathVariable String id) {
         TicketResponse response = ticketService.getTicket(id);
         if (response == null) {
             return ResponseEntity.notFound().build();

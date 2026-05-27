@@ -7,4 +7,6 @@ public class Topic {
     public static final String SEAT_ALLOCATION_RESULTS = "seat-allocation-results";
     public static final String SECTION_INIT = "section-init";
     public static final String SECTION_STATUS = "section-status";
+    public static final String TICKET_COMMANDS = "ticket-commands";
+    public static final String TICKET_STATE = "ticket-state";
 }

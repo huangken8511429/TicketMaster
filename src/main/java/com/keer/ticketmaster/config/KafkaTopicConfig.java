@@ -44,4 +44,18 @@ public class KafkaTopicConfig {
     public NewTopic seatAllocationResultsTopic() {
         return TopicBuilder.name(Topic.SEAT_ALLOCATION_RESULTS).partitions(partitions).replicas(replicas).build();
     }
+
+    @Bean
+    public NewTopic ticketCommandsTopic() {
+        return TopicBuilder.name(Topic.TICKET_COMMANDS).partitions(partitions).replicas(replicas).build();
+    }
+
+    @Bean
+    public NewTopic ticketStateTopic() {
+        return TopicBuilder.name(Topic.TICKET_STATE)
+                .partitions(partitions)
+                .replicas(replicas)
+                .compact()
+                .build();
+    }
 }

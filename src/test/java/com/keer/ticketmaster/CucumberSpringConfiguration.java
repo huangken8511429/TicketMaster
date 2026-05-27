@@ -16,7 +16,9 @@ import org.springframework.kafka.test.context.EmbeddedKafka;
                 "booking-commands",
                 "seat-allocation-requests",
                 "seat-allocation-results",
-                "booking-completed"
+                "booking-completed",
+                "ticket-commands",
+                "ticket-state"
         }
 )
 public class CucumberSpringConfiguration {
