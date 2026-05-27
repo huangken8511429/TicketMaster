@@ -5,7 +5,6 @@ import com.keer.ticketmaster.avro.SectionStatusEvent;
 import com.keer.ticketmaster.config.StateStore;
 import com.keer.ticketmaster.config.Topic;
 import com.keer.ticketmaster.request.BookingPendingRequests;
-import com.keer.ticketmaster.response.BookingResponse;
 import com.keer.ticketmaster.service.SeatAvailabilityRedisService;
 import com.keer.ticketmaster.service.TicketService;
 import io.confluent.kafka.streams.serdes.avro.SpecificAvroSerde;
@@ -26,13 +25,14 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
 /**
- * API Query topology with Redis integration.
+ * API role query topology — booking results stay in the KTable (RocksDB),
+ * Redis only mirrors section-status for the frontend availability cards.
  *
- * 1. booking-completed → KTable for interactive query + Redis booking cache
- * 2. section-status → Redis seat counters (for API pre-filter)
- *
- * All Redis I/O is offloaded to a virtual-thread executor to avoid
- * blocking Kafka Streams threads.
+ * 1. booking-completed → KTable (Interactive Query)
+ *    → foreach resumes pending DeferredResult (ticket-master Service.java:286-307)
+ *    → invalidate Spring cache for available ticket lists
+ * 2. section-status → Redis seat counters (kept for SectionAvailabilityService /
+ *    frontend MVP only — not part of the booking hot path)
  */
 @Configuration
 @Profile({"api", "default"})
@@ -56,7 +56,7 @@ public class BookingQueryTopology {
         SpecificAvroSerde<SectionStatusEvent> statusSerde = new SpecificAvroSerde<>();
         statusSerde.configure(serdeConfig, false);
 
-        // --- KTable: booking-completed → query store + Redis cache ---
+        // --- KTable: booking-completed → query store + DeferredResult wake-up ---
         KTable<String, BookingCompletedEvent> table = builder.stream(
                         Topic.BOOKING_COMPLETED,
                         Consumed.with(Serdes.String(), completedSerde))
@@ -67,31 +67,23 @@ public class BookingQueryTopology {
                 );
 
         table.toStream().foreach((bookingId, event) -> {
-            // Resolve long-polling DeferredResult — must stay on stream thread (in-memory only)
+            // Stay on the stream thread — pendingRequests.resolve is pure in-memory.
             pendingRequests.resolve(event);
 
-            // Offload Redis I/O to virtual thread — prevents blocking the stream thread
+            // Off-thread side effects (Spring cache eviction); keep the stream thread hot.
             virtualThreadExecutor.execute(() -> {
                 try {
                     if ("CONFIRMED".equalsIgnoreCase(event.getStatus())) {
                         ticketService.evictAvailableTicketsCache(event.getEventId());
                     }
-
-                    if ("REJECTED".equalsIgnoreCase(event.getStatus())) {
-                        redisService.incrementBack(
-                                event.getEventId(), event.getSection(),
-                                event.getSubPartition(), event.getSeatCount());
-                    }
-
-                    redisService.cacheBookingResult(BookingResponse.fromEvent(event));
                 } catch (Exception e) {
-                    log.debug("Non-fatal: Redis operation failed for booking {}: {}",
+                    log.debug("Non-fatal: cache eviction failed for booking {}: {}",
                             bookingId, e.getMessage());
                 }
             });
         });
 
-        // --- Stream: section-status → Redis seat counters ---
+        // --- Stream: section-status → Redis seat counters (frontend availability only) ---
         builder.stream(Topic.SECTION_STATUS, Consumed.with(Serdes.String(), statusSerde))
                 .foreach((key, event) -> {
                     virtualThreadExecutor.execute(() -> {
